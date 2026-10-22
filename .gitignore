@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Virtuelle Umgebungen
+.venv/
+venv/
+env/
+
+# Secrets (WLAN-Passwörter, API-Keys usw.)
+.env
+
+# Training: Checkpoints und Logs
+# (das fertige Modell, z. B. .pt/.onnx, wird bewusst NICHT ignoriert, damit es auf den Pi kommt)
+checkpoints/
+*.ckpt
+runs/
+wandb/
+lightning_logs/
+mlruns/
+*.log
+
+# Claude Code (persönliche Einstellungen)
+CLAUDE.local.md
+.claude/settings.local.json
+
+# Editor / IDE (gemeinsame VS-Code-Einstellungen bleiben im Repo)
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+.idea/
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# macOS
+.DS_Store
+._*
+
+# Linux / Raspberry Pi
+*~
+*.swp
+*.swo
+nohup.out
+.Trash-*/
+.nfs*
