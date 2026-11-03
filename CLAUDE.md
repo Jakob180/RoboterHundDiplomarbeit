@@ -34,8 +34,9 @@ Windows (cmd):
 Windows (PowerShell): `$env:NOVA_SIM=1; python src/servos.py`
 Linux / Pi: `NOVA_SIM=1 python3 src/servos.py`
 
-Für die Visualisierungen braucht man am PC matplotlib im venv (`.venv`, ist in `.gitignore`):
-`python -m venv .venv`, dann `.venv\Scripts\python -m pip install matplotlib` und `.venv\Scripts\python src/kinematics.py`.
+Für Visualisierungen und Simulation braucht man am PC matplotlib und mujoco im venv (`.venv`, ist in `.gitignore`):
+`python -m venv .venv`, dann `.venv\Scripts\python -m pip install matplotlib mujoco`.
+Starten z. B. mit `.venv\Scripts\python src/kinematics.py`, `src/gait.py` oder `src/sim.py`.
 
 ## Am Pi
 
@@ -67,12 +68,18 @@ Zwei getrennte Ordner, damit schnelle Tests nie mit Git kollidieren:
   - Ganzer Körper: `body_ik(feet, BodyPose(height, roll, pitch, yaw))` -> `{"FL": LegAngles, ...}`, Zeichnen mit `body_points()`. Fußpunkte in Boden-Koordinaten: Ursprung am Boden unter der Körpermitte, x vorne, y LINKS, z oben. Winkel nach Rechte-Hand-Regel (pitch + = Nase runter).
   - `python src/kinematics.py` zeigt das Bein in 3D mit Schiebereglern für die Fußposition.
 - `src/gait.py`: Grundposen `STAND`, `SIT` (Platzhalter-Werte), `blend()` für weiche Übergänge, `Trot`-Klasse (diagonale Paare, `update(dt, speed)` regelmäßig aufrufen, Standfüße rutschen nicht, Anlaufen/Anhalten ohne Sprung).
+  - Trab-Standardwerte: 0,5 s Periode, 25 mm Schritthöhe, `duty` 0,6 (jeder Fuß 60 % der Zeit am Boden, beim Wechsel stehen kurz alle 4). Mit `duty` 0,5 war der Trab in der Simulation instabil.
   - `python src/gait.py` zeigt Stehen -> Sitzen -> Trab als 3D-Animation mit Winkelverlauf, `--gif datei.gif` speichert sie.
-  - Trab mit 150 mm/s und 0,5 s Periode braucht bis ca. 250 °/s an Ober- und Unterschenkel. Mit den echten Servos vergleichen.
+  - Trab mit 150 mm/s braucht bis ca. 300 °/s an Ober- und Unterschenkel. Mit den echten Servos vergleichen.
+- `src/nova_model.py`: MuJoCo-Modell, wird aus den Maßen in `kinematics.py` erzeugt. Gelenke heißen wie in `servos.py` und drehen wie die Kinematik-Winkel (0 = Bein senkrecht), die Winkel aus `body_ik()` gehen also direkt (in Radiant) an die Simulation.
+  - Einfache Formen statt STL-Teile. Massen (ca. 1,9 kg) und Servo-Werte (2 N·m, 0,16 s/60°, `SERVO_KP`) sind PLATZHALTER.
+- `src/sim.py`: Physik-Simulation in MuJoCo (nur PC). Spielt den Ablauf aus `gait.py` mit 50 Hz ab, Servos mit begrenzter Kraft und Geschwindigkeit.
+  - `python src/sim.py` öffnet ein Fenster, `--headless` gibt nur die Auswertung aus (umgefallen?, Strecke, Neigung, Servo-Drehmoment). Trab-Werte mit `--speed`, `--period`, `--step-height`, `--duty`.
+  - Ergebnis mit den Standardwerten: fällt nicht um, 103 % der geplanten Strecke, max. ca. 2° Neigung, Servos max. ca. 1,7 N·m (86 %). Manche Werte (z. B. 0,6 s Periode) laufen deutlich schlechter, Änderungen am Gang immer erst hier prüfen.
 
 ## Nächste Schritte
 
 1. Inverse Kinematik für ein Bein: erledigt (`src/kinematics.py`). Offen: Beinlängen aus den STL-Dateien des Thingiverse-Modells abmessen.
 2. Grundposen und Gang: erledigt (`src/gait.py`). Offen: Umrechnung Kinematik-Winkel -> Servo-Winkel (Kalibrierung), Gelenkgrenzen schon in der Gangplanung berücksichtigen.
-3. Simulation in PyBullet mit Spot-Micro-URDF.
+3. Simulation: erledigt (`src/sim.py`, `src/nova_model.py`). MuJoCo statt PyBullet, weil es PyBullet für Windows nicht als fertiges Paket gibt. Offen: echte Massen und Servodaten eintragen, IMU ins Modell.
 4. Neuronales Netz per Reinforcement Learning in der Simulation am PC trainieren, als ONNX auf den Pi bringen. Der klassische Gang bleibt als Rückfallebene.
