@@ -10,8 +10,8 @@ z. B. am Pi oder unter Linux:
     NOVA_SIM=1 python3 src/servos.py
 
 ACHTUNG: Noch nicht auf der echten Hardware getestet.
-Die Grenzwerte unten sind Platzhalter und müssen für Nova ausgemessen werden,
-am besten BEVOR die Beine montiert sind.
+Die Grenzwerte und Nullpunkte unten sind Platzhalter und müssen für Nova
+ausgemessen werden, am besten BEVOR die Beine montiert sind.
 """
 
 from __future__ import annotations
@@ -31,28 +31,32 @@ class Joint:
     min_angle: float        # untere Grenze in Grad (Servo-Winkel)
     max_angle: float        # obere Grenze in Grad (Servo-Winkel)
     neutral: float          # Servo-Winkel in der Grundstellung
+    zero: float             # Servo-Winkel, bei dem der Kinematik-Winkel 0° ist (Kalibrierung)
     inverted: bool = False  # True, wenn der Servo spiegelverkehrt eingebaut ist
 
 
 # Beine: FL = vorne links, FR = vorne rechts, RL = hinten links, RR = hinten rechts
 # Gelenke: shoulder = seitlich, upper = Oberschenkel, lower = Unterschenkel
+# Spalten: Kanal, untere Grenze, obere Grenze, Grundstellung, Nullpunkt
 # PLATZHALTER-WERTE: unbedingt am echten Hund ausmessen!
+# Die Nullpunkte sind so gewählt, dass die Grundstellung (90°) ungefähr die
+# Stehpose aus gait.py ist: Oberschenkel 50° nach vorne, Knie 90° gebeugt.
 JOINTS: dict[str, Joint] = {
-    "FL_shoulder": Joint(0,  60, 120, 90),
-    "FL_upper":    Joint(1,  30, 150, 90),
-    "FL_lower":    Joint(2,  30, 150, 90),
+    "FL_shoulder": Joint(0,  60, 120, 90, 90),
+    "FL_upper":    Joint(1,  30, 150, 90, 140),
+    "FL_lower":    Joint(2,  30, 150, 90, 0),
 
-    "FR_shoulder": Joint(3,  60, 120, 90, inverted=True),
-    "FR_upper":    Joint(4,  30, 150, 90, inverted=True),
-    "FR_lower":    Joint(5,  30, 150, 90, inverted=True),
+    "FR_shoulder": Joint(3,  60, 120, 90, 90, inverted=True),
+    "FR_upper":    Joint(4,  30, 150, 90, 140, inverted=True),
+    "FR_lower":    Joint(5,  30, 150, 90, 0, inverted=True),
 
-    "RL_shoulder": Joint(6,  60, 120, 90),
-    "RL_upper":    Joint(7,  30, 150, 90),
-    "RL_lower":    Joint(8,  30, 150, 90),
+    "RL_shoulder": Joint(6,  60, 120, 90, 90),
+    "RL_upper":    Joint(7,  30, 150, 90, 140),
+    "RL_lower":    Joint(8,  30, 150, 90, 0),
 
-    "RR_shoulder": Joint(9,  60, 120, 90, inverted=True),
-    "RR_upper":    Joint(10, 30, 150, 90, inverted=True),
-    "RR_lower":    Joint(11, 30, 150, 90, inverted=True),
+    "RR_shoulder": Joint(9,  60, 120, 90, 90, inverted=True),
+    "RR_upper":    Joint(10, 30, 150, 90, 140, inverted=True),
+    "RR_lower":    Joint(11, 30, 150, 90, 0, inverted=True),
 }
 
 # Reihenfolge, in der z. B. das neuronale Netz seine 12 Ausgaben liefert
@@ -61,6 +65,35 @@ JOINT_ORDER: list[str] = list(JOINTS.keys())
 # Pulsbreiten der Servos in Mikrosekunden (laut Datenblatt eurer Servos anpassen)
 MIN_PULSE_US = 500
 MAX_PULSE_US = 2500
+PWM_HZ = 50.0  # Standard von ServoKit
+
+# Feinster Schritt, den der PCA9685 stellen kann: Er teilt eine PWM-Periode
+# (20 ms) in 4096 Stufen, das sind 4,88 µs bzw. 0,44° pro Stufe.
+ANGLE_STEP = 180.0 / ((MAX_PULSE_US - MIN_PULSE_US) * PWM_HZ * 4096 / 1e6)
+
+
+# ---------------------------------------------------------------------------
+# Kalibrierung: Kinematik-Winkel <-> Servo-Winkel
+# ---------------------------------------------------------------------------
+# Kinematik-Winkel kommen aus kinematics.py (0/0/0 = Bein senkrecht gestreckt).
+# Servo-Winkel sind das, was der Servo bekommt (0..180°, Grundstellung 90°).
+# Links und rechts rechnen gleich, die Spiegelung macht `inverted` erst ganz
+# am Schluss in set_joint().
+
+def to_servo_angle(name: str, kinematic: float) -> float:
+    """Kinematik-Winkel (Grad) -> Servo-Winkel (Grad). Begrenzt NICHT, das macht Servos.clamp()."""
+    return JOINTS[name].zero + kinematic
+
+
+def to_kinematic_angle(name: str, servo: float) -> float:
+    """Servo-Winkel (Grad) -> Kinematik-Winkel (Grad)."""
+    return servo - JOINTS[name].zero
+
+
+def kinematic_limits(name: str) -> tuple[float, float]:
+    """Gelenkgrenzen als Kinematik-Winkel. Die Simulation übernimmt sie von hier."""
+    joint = JOINTS[name]
+    return to_kinematic_angle(name, joint.min_angle), to_kinematic_angle(name, joint.max_angle)
 
 
 # ---------------------------------------------------------------------------

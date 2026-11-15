@@ -1,0 +1,9 @@
+# Für den PC/Laptop: Simulation, Visualisierung und Tests.
+#   python -m venv .venv
+#   .venv/bin/python -m pip install -r requirements-pc.txt        (Linux)
+#   .venv\Scripts\python -m pip install -r requirements-pc.txt    (Windows)
+mujoco
+numpy
+matplotlib
+pytest
+gymnasium

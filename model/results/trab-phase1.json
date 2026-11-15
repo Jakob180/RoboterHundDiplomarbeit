@@ -1,0 +1,523 @@
+{
+  "Einstellungen": {
+    "episodes": 20,
+    "seed": 0
+  },
+  "Szenarien": {
+    "Standard": {
+      "fallen_at": null,
+      "distance": 0.9008,
+      "drift": 1.5992,
+      "yaw": -0.3261,
+      "max_tilt": 1.3503,
+      "peak_torque": 0.6077,
+      "imu_error": 1.9286
+    },
+    "Totzeit 40 ms": {
+      "fallen_at": null,
+      "distance": 0.9008,
+      "drift": 1.5994,
+      "yaw": -0.3259,
+      "max_tilt": 1.3503,
+      "peak_torque": 0.6077,
+      "imu_error": 1.9286
+    },
+    "Reibung 0,4": {
+      "fallen_at": null,
+      "distance": 0.9513,
+      "drift": -0.7334,
+      "yaw": 0.0124,
+      "max_tilt": 1.5188,
+      "peak_torque": 0.5511,
+      "imu_error": 1.7481
+    },
+    "Reibung 0,3": {
+      "fallen_at": null,
+      "distance": 0.9639,
+      "drift": -3.0235,
+      "yaw": -0.5186,
+      "max_tilt": 1.6279,
+      "peak_torque": 0.5489,
+      "imu_error": 2.2106
+    },
+    "Reibung 0,15": {
+      "fallen_at": null,
+      "distance": 0.8886,
+      "drift": -11.4529,
+      "yaw": -1.1673,
+      "max_tilt": 1.7784,
+      "peak_torque": 0.5497,
+      "imu_error": 2.3127
+    },
+    "Kalibrierfehler ±3°": {
+      "fallen_at": null,
+      "distance": 0.7551,
+      "drift": 391.5524,
+      "yaw": 41.3463,
+      "max_tilt": 5.2795,
+      "peak_torque": 0.707,
+      "imu_error": 3.1724
+    },
+    "Spiel 2° an allen Gelenken": {
+      "fallen_at": null,
+      "distance": 0.634,
+      "drift": 1.6287,
+      "yaw": 0.1149,
+      "max_tilt": 4.0624,
+      "peak_torque": 0.6656,
+      "imu_error": 3.3397
+    },
+    "Seitenstoß 5 N / 0,2 s": {
+      "fallen_at": null,
+      "distance": 0.8789,
+      "drift": 38.8261,
+      "yaw": 4.9047,
+      "max_tilt": 4.9799,
+      "peak_torque": 0.873,
+      "imu_error": 3.9428
+    },
+    "Seitenstoß 10 N / 0,2 s": {
+      "fallen_at": null,
+      "distance": 0.8022,
+      "drift": 32.5278,
+      "yaw": 3.5457,
+      "max_tilt": 7.1506,
+      "peak_torque": 1.0,
+      "imu_error": 4.994
+    },
+    "Seitenstoß 15 N / 0,2 s": {
+      "fallen_at": null,
+      "distance": 0.8784,
+      "drift": -22.0913,
+      "yaw": -12.9511,
+      "max_tilt": 12.4514,
+      "peak_torque": 1.0,
+      "imu_error": 5.3555
+    },
+    "Seitenstoß 20 N / 0,2 s": {
+      "fallen_at": 12.36,
+      "distance": null,
+      "drift": null,
+      "yaw": null,
+      "max_tilt": 47.4877,
+      "peak_torque": 0.8364,
+      "imu_error": 1.7996
+    },
+    "Servo 2,0 N·m (Akku leer)": {
+      "fallen_at": null,
+      "distance": 0.9104,
+      "drift": 6.3469,
+      "yaw": 0.1137,
+      "max_tilt": 1.3528,
+      "peak_torque": 0.7823,
+      "imu_error": 2.2712
+    },
+    "Rumpf +20 % (2,9 kg)": {
+      "fallen_at": null,
+      "distance": 0.8876,
+      "drift": 8.8066,
+      "yaw": 0.4208,
+      "max_tilt": 1.1117,
+      "peak_torque": 0.6605,
+      "imu_error": 2.3081
+    }
+  },
+  "Randomisiert": {
+    "ohne Stöße": {
+      "Zusammenfassung": {
+        "Episoden": 20,
+        "umgefallen": 0,
+        "Strecke Mittel": 0.7344,
+        "Strecke min": 0.2918,
+        "|Drift| Mittel [mm]": 189.4281,
+        "|Drift| max [mm]": 336.1613,
+        "|Gier| Mittel [°]": 29.0821,
+        "|Gier| max [°]": 65.2203,
+        "Neigung Mittel [°]": 4.8732,
+        "Neigung max [°]": 9.0957,
+        "Moment max": 1.0,
+        "IMU-Fehler max [°]": 9.9119
+      },
+      "Episoden": [
+        {
+          "fallen_at": null,
+          "distance": 0.8339,
+          "drift": -18.1638,
+          "yaw": -7.4983,
+          "max_tilt": 4.3785,
+          "peak_torque": 0.7563,
+          "imu_error": 2.6146
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.6492,
+          "drift": -320.9936,
+          "yaw": -65.2203,
+          "max_tilt": 1.5391,
+          "peak_torque": 0.6725,
+          "imu_error": 2.4911
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.9299,
+          "drift": -177.4438,
+          "yaw": -21.1125,
+          "max_tilt": 5.1419,
+          "peak_torque": 1.0,
+          "imu_error": 3.9459
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.4899,
+          "drift": 247.0285,
+          "yaw": 51.2925,
+          "max_tilt": 4.5421,
+          "peak_torque": 0.6929,
+          "imu_error": 3.877
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.7233,
+          "drift": 195.7253,
+          "yaw": 22.237,
+          "max_tilt": 3.9141,
+          "peak_torque": 0.7608,
+          "imu_error": 3.5786
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.7689,
+          "drift": 251.6342,
+          "yaw": 20.1456,
+          "max_tilt": 5.5428,
+          "peak_torque": 0.8655,
+          "imu_error": 4.6837
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.7548,
+          "drift": 219.2819,
+          "yaw": 24.8871,
+          "max_tilt": 5.1813,
+          "peak_torque": 0.7931,
+          "imu_error": 5.6058
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.5975,
+          "drift": -336.1613,
+          "yaw": -50.9253,
+          "max_tilt": 7.8229,
+          "peak_torque": 1.0,
+          "imu_error": 9.9119
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.8652,
+          "drift": 232.8649,
+          "yaw": 34.0374,
+          "max_tilt": 5.065,
+          "peak_torque": 0.8487,
+          "imu_error": 3.6369
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.6317,
+          "drift": -77.7703,
+          "yaw": -24.3384,
+          "max_tilt": 3.6116,
+          "peak_torque": 0.8325,
+          "imu_error": 4.6952
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.6231,
+          "drift": 272.2373,
+          "yaw": 54.8723,
+          "max_tilt": 7.5738,
+          "peak_torque": 1.0,
+          "imu_error": 4.9336
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.9815,
+          "drift": -137.1515,
+          "yaw": -2.5253,
+          "max_tilt": 2.4389,
+          "peak_torque": 0.9503,
+          "imu_error": 2.8994
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.8647,
+          "drift": -153.9417,
+          "yaw": -30.2117,
+          "max_tilt": 2.5257,
+          "peak_torque": 0.9993,
+          "imu_error": 3.7633
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.7276,
+          "drift": 205.96,
+          "yaw": 23.856,
+          "max_tilt": 3.5313,
+          "peak_torque": 0.7226,
+          "imu_error": 1.6364
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.9908,
+          "drift": 19.2509,
+          "yaw": 13.8061,
+          "max_tilt": 3.9302,
+          "peak_torque": 0.9997,
+          "imu_error": 2.3596
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.2918,
+          "drift": -28.6171,
+          "yaw": -36.7158,
+          "max_tilt": 8.1558,
+          "peak_torque": 1.0,
+          "imu_error": 6.551
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.688,
+          "drift": 274.5556,
+          "yaw": 33.4968,
+          "max_tilt": 7.2689,
+          "peak_torque": 1.0,
+          "imu_error": 3.0188
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.4684,
+          "drift": -287.968,
+          "yaw": -34.1356,
+          "max_tilt": 9.0957,
+          "peak_torque": 1.0,
+          "imu_error": 8.0836
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.9813,
+          "drift": -216.8455,
+          "yaw": -18.2793,
+          "max_tilt": 3.4542,
+          "peak_torque": 0.5292,
+          "imu_error": 3.4026
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.8261,
+          "drift": 114.966,
+          "yaw": 12.0496,
+          "max_tilt": 2.7495,
+          "peak_torque": 0.9558,
+          "imu_error": 1.9366
+        }
+      ]
+    },
+    "mit Stößen": {
+      "Zusammenfassung": {
+        "Episoden": 20,
+        "umgefallen": 1,
+        "Strecke Mittel": 0.7491,
+        "Strecke min": 0.3288,
+        "|Drift| Mittel [mm]": 191.4954,
+        "|Drift| max [mm]": 423.0399,
+        "|Gier| Mittel [°]": 27.7164,
+        "|Gier| max [°]": 59.5932,
+        "Neigung Mittel [°]": 7.7388,
+        "Neigung max [°]": 22.6224,
+        "Moment max": 1.0,
+        "IMU-Fehler max [°]": 9.4339
+      },
+      "Episoden": [
+        {
+          "fallen_at": null,
+          "distance": 0.7611,
+          "drift": 153.1641,
+          "yaw": 18.3905,
+          "max_tilt": 12.3312,
+          "peak_torque": 1.0,
+          "imu_error": 3.7729
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.6658,
+          "drift": -309.692,
+          "yaw": -59.5932,
+          "max_tilt": 3.5385,
+          "peak_torque": 0.6716,
+          "imu_error": 2.5078
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.9024,
+          "drift": -209.0509,
+          "yaw": -24.8681,
+          "max_tilt": 6.9391,
+          "peak_torque": 1.0,
+          "imu_error": 3.7103
+        },
+        {
+          "fallen_at": 16.116,
+          "distance": null,
+          "drift": null,
+          "yaw": null,
+          "max_tilt": 47.1391,
+          "peak_torque": 1.0,
+          "imu_error": 4.5607
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.7081,
+          "drift": 222.9264,
+          "yaw": 27.5146,
+          "max_tilt": 5.1301,
+          "peak_torque": 0.7656,
+          "imu_error": 3.1212
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.6915,
+          "drift": 423.0399,
+          "yaw": 52.8299,
+          "max_tilt": 22.6224,
+          "peak_torque": 1.0,
+          "imu_error": 4.799
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.7833,
+          "drift": 170.8354,
+          "yaw": 19.4819,
+          "max_tilt": 6.5087,
+          "peak_torque": 0.851,
+          "imu_error": 5.092
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.566,
+          "drift": -402.7156,
+          "yaw": -53.1199,
+          "max_tilt": 9.0319,
+          "peak_torque": 1.0,
+          "imu_error": 9.4339
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.8792,
+          "drift": 162.4007,
+          "yaw": 28.7528,
+          "max_tilt": 7.5246,
+          "peak_torque": 1.0,
+          "imu_error": 3.8318
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.6092,
+          "drift": -75.8006,
+          "yaw": -10.2743,
+          "max_tilt": 10.6685,
+          "peak_torque": 1.0,
+          "imu_error": 8.2576
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.6829,
+          "drift": 203.7522,
+          "yaw": 41.1641,
+          "max_tilt": 7.4601,
+          "peak_torque": 1.0,
+          "imu_error": 3.921
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.9818,
+          "drift": -130.5111,
+          "yaw": -1.487,
+          "max_tilt": 2.5031,
+          "peak_torque": 0.9503,
+          "imu_error": 2.7518
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.8668,
+          "drift": -113.5385,
+          "yaw": -26.8915,
+          "max_tilt": 4.0333,
+          "peak_torque": 1.0,
+          "imu_error": 3.7074
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.6959,
+          "drift": 216.6097,
+          "yaw": 33.761,
+          "max_tilt": 7.687,
+          "peak_torque": 1.0,
+          "imu_error": 2.2622
+        },
+        {
+          "fallen_at": null,
+          "distance": 1.0375,
+          "drift": 31.6375,
+          "yaw": 13.5206,
+          "max_tilt": 4.5985,
+          "peak_torque": 0.9997,
+          "imu_error": 2.3596
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.3288,
+          "drift": -61.8685,
+          "yaw": -33.155,
+          "max_tilt": 8.0815,
+          "peak_torque": 1.0,
+          "imu_error": 6.3056
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.7293,
+          "drift": 152.5552,
+          "yaw": 14.4236,
+          "max_tilt": 7.6377,
+          "peak_torque": 1.0,
+          "imu_error": 2.7426
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.5287,
+          "drift": -282.5239,
+          "yaw": -40.5484,
+          "max_tilt": 8.8528,
+          "peak_torque": 1.0,
+          "imu_error": 4.8106
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.9895,
+          "drift": -120.4262,
+          "yaw": -10.9765,
+          "max_tilt": 7.1436,
+          "peak_torque": 0.7145,
+          "imu_error": 3.4291
+        },
+        {
+          "fallen_at": null,
+          "distance": 0.825,
+          "drift": 195.3646,
+          "yaw": 15.8589,
+          "max_tilt": 4.7448,
+          "peak_torque": 0.9529,
+          "imu_error": 3.7118
+        }
+      ]
+    }
+  }
+}

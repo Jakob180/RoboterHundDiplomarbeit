@@ -69,6 +69,23 @@ def blend(a: Pose, b: Pose, s: float) -> Pose:
 _PHASE_OFFSET = {"FL": 0.0, "RR": 0.0, "FR": 0.5, "RL": 0.5}
 
 
+def _advance(
+    x: float, y: float, heading: float, speed: float, yaw_rate: float, t: float,
+) -> tuple[float, float, float]:
+    """Wo ist der Körper nach t Sekunden, wenn er gleichmäßig weiterläuft?
+
+    x, y in mm, heading in Grad, speed in mm/s, yaw_rate in °/s. Ergebnis (x, y, heading).
+    """
+    h = math.radians(heading)
+    w = math.radians(yaw_rate)
+    if abs(w) < 1e-9:  # geradeaus
+        return x + speed * t * math.cos(h), y + speed * t * math.sin(h), heading
+    # Kreisbogen mit Radius speed / w
+    r = speed / w
+    h2 = h + w * t
+    return x + r * (math.sin(h2) - math.sin(h)), y - r * (math.cos(h2) - math.cos(h)), heading + yaw_rate * t
+
+
 class Trot:
     """Einfacher Trab. `update()` regelmäßig aufrufen, z. B. alle 20 ms.
 
@@ -76,9 +93,9 @@ class Trot:
     schwingt den Rest nach vorne (Schwungphase). Bei duty > 0,5 stehen beim
     Wechsel der Paare kurz alle 4 Füße am Boden, das macht den Trab ruhiger.
     In der Standphase bleibt der Fuß an seiner Stelle am Boden und der Körper
-    bewegt sich darüber hinweg. Deshalb merkt sich die Klasse die Füße in
-    Weltkoordinaten (x ab dem Startpunkt) und den Weg `distance`, den die
-    Körpermitte zurückgelegt hat.
+    bewegt sich darüber hinweg. Deshalb merkt sich die Klasse die Füße und den
+    Körper in Weltkoordinaten (ab dem Startpunkt): `x`, `y` (mm) und `heading`
+    (Grad, + = nach links gedreht). `distance` ist der zurückgelegte Weg.
     """
 
     def __init__(
@@ -89,16 +106,31 @@ class Trot:
         self.step_height = step_height  # mm, wie hoch die Füße gehoben werden
         self.duty = duty                # Anteil der Periode, in dem ein Fuß am Boden steht
         self.distance = 0.0             # mm, Weg der Körpermitte seit dem Start
+        self.x = 0.0                    # mm, Körpermitte in der Welt
+        self.y = 0.0
+        self.heading = 0.0              # Grad, Blickrichtung in der Welt
         self._phase = 0.0               # 0..1 innerhalb einer Periode
-        self._foot_x = {leg: base.feet[leg][0] for leg in LEGS}  # Welt-x der Füße
-        self._liftoff_x: dict[str, float] = {}  # Welt-x beim Abheben, nur in der Schwungphase
-        self._target_x: dict[str, float] = {}
+        self._foot = {leg: base.feet[leg][:2] for leg in LEGS}  # Welt-x/y der Füße
+        self._liftoff: dict[str, tuple[float, float]] = {}  # Welt-x/y beim Abheben, nur in der Schwungphase
+        self._target: dict[str, tuple[float, float]] = {}
 
-    def update(self, dt: float, speed: float) -> Pose:
-        """Einen Zeitschritt dt (s) weiter mit Geschwindigkeit speed (mm/s, + = vorwärts)."""
+    @property
+    def phase(self) -> float:
+        """Wo der Trab im Zyklus gerade ist, 0..1. FL und RR schwingen ab `duty`, FR und RL eine halbe Periode versetzt."""
+        return self._phase
+
+    def update(self, dt: float, speed: float, yaw_rate: float = 0.0) -> Pose:
+        """Einen Zeitschritt dt (s) weiter.
+
+        speed in mm/s (+ = vorwärts), yaw_rate in °/s (+ = Linkskurve).
+        Die Fußpunkte im Ergebnis gelten im Koordinatensystem des Hundes
+        (x in Blickrichtung), so wie `body_ik()` sie braucht.
+        """
         self.distance += speed * dt
+        self.x, self.y, self.heading = _advance(self.x, self.y, self.heading, speed, yaw_rate, dt)
         self._phase = (self._phase + dt / self.period) % 1.0
 
+        h = math.radians(self.heading)
         feet = {}
         for leg in LEGS:
             home_x, home_y, home_z = self.base.feet[leg]
@@ -106,26 +138,38 @@ class Trot:
             z = home_z
 
             if p >= self.duty:  # Schwungphase
-                if leg not in self._liftoff_x:
-                    self._liftoff_x[leg] = self._foot_x[leg]
-                # Ziel: beim Aufsetzen eine halbe Schrittlänge vor der Grundposition
-                # stehen, dann ist der Fuß beim Abheben gleich weit dahinter.
+                if leg not in self._liftoff:
+                    self._liftoff[leg] = self._foot[leg]
+                # Ziel: Der Fuß soll in der Mitte der nächsten Standphase genau in
+                # seiner Grundposition unter dem Körper stehen. Dann setzt er eine
+                # halbe Schrittlänge davor auf und hebt gleich weit dahinter ab.
                 time_left = (1.0 - p) * self.period
-                stride = speed * self.period * self.duty  # Weg des Körpers während einer Standphase
-                self._target_x[leg] = self.distance + speed * time_left + home_x + stride / 2
+                bx, by, bh = _advance(
+                    self.x, self.y, self.heading, speed, yaw_rate, time_left + self.period * self.duty / 2,
+                )
+                bh = math.radians(bh)
+                self._target[leg] = (
+                    bx + home_x * math.cos(bh) - home_y * math.sin(bh),
+                    by + home_x * math.sin(bh) + home_y * math.cos(bh),
+                )
 
                 # Zykloide: Der Fuß hebt ohne Ruck ab und setzt ohne Rutschen auf
                 u = (p - self.duty) / (1.0 - self.duty)
                 progress = u - math.sin(2 * math.pi * u) / (2 * math.pi)
-                start = self._liftoff_x[leg]
-                self._foot_x[leg] = start + (self._target_x[leg] - start) * progress
+                start, target = self._liftoff[leg], self._target[leg]
+                self._foot[leg] = (
+                    start[0] + (target[0] - start[0]) * progress,
+                    start[1] + (target[1] - start[1]) * progress,
+                )
                 z += self.step_height * (1 - math.cos(2 * math.pi * u)) / 2
 
-            elif leg in self._liftoff_x:  # gerade aufgesetzt
-                del self._liftoff_x[leg]
-                self._foot_x[leg] = self._target_x[leg]
+            elif leg in self._liftoff:  # gerade aufgesetzt
+                del self._liftoff[leg]
+                self._foot[leg] = self._target[leg]
 
-            feet[leg] = (self._foot_x[leg] - self.distance, home_y, z)
+            # Welt -> Koordinatensystem des Hundes
+            dx, dy = self._foot[leg][0] - self.x, self._foot[leg][1] - self.y
+            feet[leg] = (dx * math.cos(h) + dy * math.sin(h), -dx * math.sin(h) + dy * math.cos(h), z)
 
         return Pose(feet, self.base.body)
 

@@ -163,27 +163,32 @@ def _is_right(leg: str) -> bool:
     return leg[1] == "R"
 
 
+def foot_ik(leg: str, foot: Vec3, body: BodyPose) -> LegAngles:
+    """Ein Fußpunkt (Boden-Koordinaten, mm) -> Gelenkwinkel dieses Beins.
+
+    Wirft ValueError, wenn der Fuß nicht erreichbar ist.
+    """
+    rot = _rotation(body)
+    fx, fy, fz = foot
+    d = (fx, fy, fz - body.height)
+    # Boden -> Körper: mit der transponierten Drehmatrix zurückdrehen
+    px, py, pz = (sum(rot[r][c] * d[r] for r in range(3)) for c in range(3))
+    sx, sy, sz = SHOULDERS[leg]
+    x, y, z = px - sx, py - sy, pz - sz
+    if _is_right(leg):
+        y = -y  # Bein-Koordinaten: y zeigt immer nach außen
+    try:
+        return leg_ik(x, y, z)
+    except ValueError as err:
+        raise ValueError(f"{leg}: {err}") from None
+
+
 def body_ik(feet: dict[str, Vec3], body: BodyPose) -> dict[str, LegAngles]:
     """Fußpunkte (Boden-Koordinaten, mm) -> Gelenkwinkel aller 4 Beine.
 
     Wirft ValueError, wenn ein Fuß nicht erreichbar ist.
     """
-    rot = _rotation(body)
-    angles = {}
-    for leg in LEGS:
-        fx, fy, fz = feet[leg]
-        d = (fx, fy, fz - body.height)
-        # Boden -> Körper: mit der transponierten Drehmatrix zurückdrehen
-        px, py, pz = (sum(rot[r][c] * d[r] for r in range(3)) for c in range(3))
-        sx, sy, sz = SHOULDERS[leg]
-        x, y, z = px - sx, py - sy, pz - sz
-        if _is_right(leg):
-            y = -y  # Bein-Koordinaten: y zeigt immer nach außen
-        try:
-            angles[leg] = leg_ik(x, y, z)
-        except ValueError as err:
-            raise ValueError(f"{leg}: {err}") from None
-    return angles
+    return {leg: foot_ik(leg, feet[leg], body) for leg in LEGS}
 
 
 def body_points(angles: dict[str, LegAngles], body: BodyPose) -> dict[str, list[Vec3]]:

@@ -687,6 +687,16 @@ Jede Phase endet mit etwas Prüfbarem.
   (wie Abschnitt 2.1, aber systematisch, mit festen Zufallszahlen).
 - Ergebnis: Der klassische Trab läuft noch, die Ausgangswerte für den
   Vergleich stehen fest.
+- **Stand 15.11.2026: erledigt** (lokal, noch nicht am echten Hund geprüft).
+  Ausgangswerte in `model/results/trab-phase1.json` (`python model/evaluate.py`).
+  Standard: 90 % Strecke, +2 mm / −0,3°, 1,4° Neigung, 61 % Moment.
+  Kalibrierfehler ±3°: 76 %, +392 mm / +41°. Spiel 2°: 63 %. Stoß 15 N wird
+  mit dem schwereren Modell überstanden, ab 20 N fällt Nova um. Randomisiert
+  (20 Durchläufe): im Mittel 73 % Strecke, 190 mm Drift, 29° Drehung, mit
+  Stößen fällt 1 von 20 um. Der IMU-Filter liegt nominal bis 1,9° daneben,
+  unter starker Randomisierung (Hund federt) bis ca. 10°.
+  **Achtung Phase 3:** Das Abnahme-Kriterium „15-N-Stoß“ unterscheidet nicht
+  mehr, weil schon der Trab ihn übersteht. Vorschlag: 20 N.
 
 **Phase 2: Trainingsumgebung**
 - `src/policy.py` (Beobachtung, Aktion, Begrenzung, beide Modi) und
@@ -694,6 +704,16 @@ Jede Phase endet mit etwas Prüfbarem.
 - Tests: `gymnasium.utils.env_checker.check_env`, Netz-Ausgabe 0 ergibt genau
   den klassischen Trab, Kinematik hin und zurück, Grenzen werden eingehalten.
 - Ergebnis: Ein zufälliges Netz läuft durch, Korrektur 0 = Trab.
+- **Stand 15.11.2026: erledigt** (lokal). `src/policy.py`, `model/nova_env.py`,
+  `model/config.py`, dazu Fehler des Lagesensors in `randomization.py`.
+  `check_env` ohne Warnung, Korrektur 0 ergibt exakt die Winkel des Trabs.
+  Ohne Zufall trabt Korrektur 0 alle 10 s durch (87 % der befohlenen Strecke),
+  mit Randomisierung und Stößen fallen 2 von 8 Episoden. Ein zufälliges Netz
+  fällt meist um. Stufe 2: Den Trab nachmachen bringt 950 Punkte, nur Stehen
+  617, Laufen lohnt sich also. Tempo am Laptop ca. 630 Schritte/s, am PC mit
+  mehreren Kernen entsprechend mehr. Auffällig für Phase 3: Der Term
+  „Drehrate halten“ gibt dem Trab nur 0,62 (der Rumpf schwingt beim Traben
+  um die Hochachse), Stehen bekommt 1,0.
 
 **Phase 3: Training Stufe 1**
 - `model/train.py`: zuerst ohne Randomisierung (prüfen, ob es überhaupt lernt),
