@@ -40,9 +40,15 @@ from nova_env import NovaEnv  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def make_env(mode: str, randomize: bool, pushes: bool, seed: int) -> NovaEnv:
-    """Eine Umgebung (steht oben in der Datei, damit Windows sie an Unterprozesse geben kann)."""
-    env = NovaEnv(mode=mode, randomize=randomize, pushes=pushes)
+def make_env(mode: str, randomize: bool, push_force: float, seed: int) -> NovaEnv:
+    """Eine Umgebung (steht oben in der Datei, damit Windows sie an Unterprozesse geben kann).
+
+    push_force: stärkster Stoß in N, 0 = keine Stöße.
+    """
+    if push_force > 0:
+        env = NovaEnv(mode=mode, randomize=randomize, pushes=True, push_force=push_force)
+    else:
+        env = NovaEnv(mode=mode, randomize=randomize, pushes=False)
     env.reset(seed=seed)
     return env
 
@@ -89,7 +95,7 @@ def train(
     settings = dict(config.PPO_SETTINGS)
     n_envs = envs or os.cpu_count() or 1
     if quick:  # nur prüfen, ob alles läuft
-        stages = [(name, 0.001, randomize, pushes) for name, _, randomize, pushes in stages]
+        stages = [(name, 0.001, randomize, push_force) for name, _, randomize, push_force in stages]
         settings.update(n_steps=64, batch_size=64, n_epochs=2)
         n_envs = min(n_envs, 2)
 
@@ -102,10 +108,10 @@ def train(
     )
 
     model = None
-    for i, (name, millions, randomize, pushes) in enumerate(stages):
+    for i, (name, millions, randomize, push_force) in enumerate(stages):
         steps = int(millions * 1e6 * scale)
         vec = VecMonitor(vec_cls([
-            partial(make_env, mode, randomize, pushes, seed + 1000 * i + k) for k in range(n_envs)
+            partial(make_env, mode, randomize, push_force, seed + 1000 * i + k) for k in range(n_envs)
         ]))
         if model is None:
             model = PPO(
@@ -119,7 +125,9 @@ def train(
             )
         else:
             model.set_env(vec)
-        print(f"[{time.strftime('%H:%M')}] Abschnitt {name}: {steps:,} Schritte, {n_envs} Hunde parallel", flush=True)
+        pushes = f", Stöße bis {push_force:.0f} N" if push_force > 0 else ""
+        print(f"[{time.strftime('%H:%M')}] Abschnitt {name}: {steps:,} Schritte, {n_envs} Hunde parallel{pushes}",
+              flush=True)
         model.learn(
             steps, reset_num_timesteps=(i == 0), tb_log_name=run,
             callback=[
@@ -136,6 +144,16 @@ def train(
     return final
 
 
+def next_steps(final: Path) -> str:
+    """Befehle für danach, Pfade in Anführungszeichen (Leerzeichen, z. B. "Ki Projekte")."""
+    python = r".venv\Scripts\python" if os.name == "nt" else ".venv/bin/python"
+    return (
+        "Weiter mit:\n"
+        f'  {python} model/evaluate.py --policy "{final}"\n'
+        f'  {python} model/export_onnx.py "{final}"'
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Netz für Nova trainieren (PPO)")
     parser.add_argument("--mode", default="residual", help="residual = Stufe 1 (Stufe 2 kommt in Phase 4)")
@@ -146,9 +164,7 @@ def main() -> None:
     parser.add_argument("--quick", action="store_true", help="kurzer Probelauf")
     args = parser.parse_args()
     final = train(args.mode, args.run, args.envs, args.scale, args.quick, args.seed)
-    print("Weiter mit:")
-    print(f"  python model/evaluate.py --policy {final}")
-    print(f"  python model/export_onnx.py {final}")
+    print(next_steps(final))
 
 
 if __name__ == "__main__":  # Pflicht unter Windows, sonst starten die Unterprozesse das Training erneut

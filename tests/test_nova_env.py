@@ -224,3 +224,13 @@ def test_commanded_turn_is_the_course():
 
 def test_course_is_rewarded_in_both_stages():
     assert config.REWARD["residual"]["kurs"] > 0 and config.REWARD["full"]["kurs"] > 0
+
+
+def test_push_strength_reaches_the_randomization():
+    import math
+    env = NovaEnv(randomize=True, pushes=True, push_force=25.0, episode_seconds=60.0)
+    forces = []
+    for seed in range(5):
+        env.reset(seed=seed)
+        forces += [math.hypot(p.force[0], p.force[1]) for p in env.randomization.pushes]
+    assert max(forces) <= 25.0 and max(forces) > 15.0

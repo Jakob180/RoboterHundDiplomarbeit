@@ -70,13 +70,15 @@ NET_ARCH = [128, 128]        # 2 Schichten mit je 128 Neuronen, Actor und Critic
 LOG_STD_INIT = -2.0
 CHECKPOINT_EVERY = 1_000_000  # Schritte zwischen zwei Zwischenständen
 
-# Lehrplan je Stufe: (Name, Millionen Schritte, Randomisierung, Stöße).
+# Lehrplan je Stufe: (Name, Millionen Schritte, Randomisierung, stärkster Stoß in N; 0 = keine Stöße).
 # Erst ohne Zufall (lernt es überhaupt?), dann ein zufälliger Hund je Episode, dann Stöße.
+# Stöße bis 25 N statt 15 N (Plan): Mit 15 N im Training hat das 1. Netz (19.11.2026) einen
+# 20-N-Stoß nie erlebt und nicht abgefangen; 15 N übersteht schon der Trab ohne Netz.
 CURRICULUM = {
     "residual": [
-        ("1-ohne-zufall", 2.0, False, False),
-        ("2-randomisiert", 6.0, True, False),
-        ("3-mit-stoessen", 7.0, True, True),
+        ("1-ohne-zufall", 2.0, False, 0.0),
+        ("2-randomisiert", 6.0, True, 0.0),
+        ("3-mit-stoessen", 7.0, True, 25.0),
     ],
     # Stufe 2 startet mit Nachahmen (Behavior Cloning) und kommt in Phase 4.
 }

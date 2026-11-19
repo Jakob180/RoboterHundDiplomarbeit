@@ -56,3 +56,16 @@ def test_learning_curves_contain_reward_terms_and_episodes(quick_run):
 def test_stage_2_training_is_not_there_yet():
     with pytest.raises(ValueError, match="Phase 4"):
         train.train(mode="full", quick=True)
+
+
+def test_next_steps_quote_paths_with_spaces():
+    from pathlib import Path
+    text = train.next_steps(Path("C:/Ki Projekte/RoboterHundDiplomarbeit/checkpoints/lauf/final.zip"))
+    assert '--policy "C:/Ki Projekte/RoboterHundDiplomarbeit/checkpoints/lauf/final.zip"' in text
+    assert 'export_onnx.py "C:/Ki Projekte/' in text
+
+
+def test_last_curriculum_stage_pushes_up_to_25_newton():
+    name, millions, randomize, push_force = config.CURRICULUM["residual"][-1]
+    assert randomize and push_force == 25.0
+    assert config.CURRICULUM["residual"][0][3] == 0.0  # erster Abschnitt ohne Stöße

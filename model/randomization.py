@@ -89,8 +89,10 @@ class Randomization:
     imu: ImuErrors = field(default_factory=ImuErrors)
 
 
-def sample(rng: np.random.Generator, pushes: bool = True, duration: float = 20.0) -> Randomization:
-    """Neue Werte würfeln. duration (s): bis wann Stöße geplant werden.
+def sample(
+    rng: np.random.Generator, pushes: bool = True, duration: float = 20.0, max_force: float = PUSH_FORCE[1],
+) -> Randomization:
+    """Neue Werte würfeln. duration (s): bis wann Stöße geplant werden, max_force (N): stärkster Stoß.
 
     Die Stöße werden zuletzt gewürfelt. Mit gleichem rng ist der Hund deshalb
     mit und ohne Stöße derselbe, nur die Stöße kommen dazu.
@@ -120,18 +122,18 @@ def sample(rng: np.random.Generator, pushes: bool = True, duration: float = 20.0
     # Ausgangswerte aus Phase 1) gleich, und der Sensor ist mit und ohne Stöße derselbe.
     r.imu = _sample_imu(np.random.default_rng((r.seed, 1)))
     if pushes:
-        r.pushes = sample_pushes(rng, duration)
+        r.pushes = sample_pushes(rng, duration, max_force)
     return r
 
 
-def sample_pushes(rng: np.random.Generator, duration: float) -> list[Push]:
-    """Stöße alle 3 bis 6 s bis `duration` (s), waagrecht in zufälliger Richtung."""
+def sample_pushes(rng: np.random.Generator, duration: float, max_force: float = PUSH_FORCE[1]) -> list[Push]:
+    """Stöße alle 3 bis 6 s bis `duration` (s), waagrecht in zufälliger Richtung, 0 bis max_force N."""
     u = rng.uniform
     planned = []
     t = u(*PUSH_EVERY)
     while t < duration:
         angle = u(0.0, 2 * math.pi)
-        force = u(*PUSH_FORCE)
+        force = u(PUSH_FORCE[0], max_force)
         planned.append(Push(t, (force * math.cos(angle), force * math.sin(angle), 0.0), u(*PUSH_DURATION)))
         t += u(*PUSH_EVERY)
     return planned

@@ -37,7 +37,7 @@ import config  # noqa: E402
 from gait import STAND  # noqa: E402
 from imu import ComplementaryFilter  # noqa: E402
 from policy import N_ACTIONS, OBS_CLIP, STAND_ANGLES, FullMode, ResidualMode, joint_dict  # noqa: E402
-from randomization import Randomization, apply, imu_reading, sample, sample_pushes  # noqa: E402
+from randomization import PUSH_FORCE, Randomization, apply, imu_reading, sample, sample_pushes  # noqa: E402
 from sim import CONTROL_HZ, NovaSim  # noqa: E402
 
 DT = 1.0 / CONTROL_HZ
@@ -58,12 +58,14 @@ class NovaEnv(gym.Env):
         pushes: bool = True,
         max_yaw_rate: float = config.COMMAND_YAW_RATE,
         episode_seconds: float = config.EPISODE_SECONDS,
+        push_force: float = PUSH_FORCE[1],
     ) -> None:
         if mode not in config.REWARD:
             raise ValueError(f"mode muss 'residual' oder 'full' sein, nicht {mode!r}")
         self.mode = mode
         self.randomize = randomize      # neuer zufälliger Hund bei jedem reset()
         self.pushes = pushes            # Stöße alle 3 bis 6 s
+        self.push_force = push_force    # N, stärkster Stoß
         self.max_yaw_rate = max_yaw_rate
         self.episode_steps = round(episode_seconds * CONTROL_HZ)
         self.weights = config.REWARD[mode]
@@ -84,9 +86,11 @@ class NovaEnv(gym.Env):
         if "randomization" in options:      # fest vorgegebener Hund (Vergleiche)
             self.randomization = options["randomization"]
         elif self.randomize:
-            self.randomization = sample(rng, self.pushes, total)
+            self.randomization = sample(rng, self.pushes, total, self.push_force)
         else:
-            self.randomization = Randomization(pushes=sample_pushes(rng, total) if self.pushes else [])
+            self.randomization = Randomization(
+                pushes=sample_pushes(rng, total, self.push_force) if self.pushes else [],
+            )
         self._fixed_command = options.get("command")  # (mm/s, °/s) für die ganze Episode
 
         self.sim = NovaSim()

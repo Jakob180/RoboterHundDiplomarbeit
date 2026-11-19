@@ -152,3 +152,16 @@ def test_noise_has_the_given_size():
     accel = np.array([r[1] for r in readings]) - raw_accel
     assert gyro.std() == pytest.approx(0.01, rel=0.1)
     assert accel.std() == pytest.approx(0.1, rel=0.1)
+
+
+def test_push_strength_can_be_raised():
+    strong = rnd.sample_pushes(np.random.default_rng(0), 600.0, max_force=25.0)
+    forces = [math.hypot(p.force[0], p.force[1]) for p in strong]
+    assert max(forces) <= 25.0 and max(forces) > 15.0
+
+
+def test_default_push_strength_stays_15_newton():
+    a = rnd.sample_pushes(np.random.default_rng(0), 600.0)
+    b = rnd.sample_pushes(np.random.default_rng(0), 600.0, max_force=15.0)
+    assert a == b
+    assert max(math.hypot(p.force[0], p.force[1]) for p in a) <= 15.0

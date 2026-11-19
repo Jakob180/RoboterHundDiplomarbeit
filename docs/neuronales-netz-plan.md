@@ -733,6 +733,15 @@ Jede Phase endet mit etwas Prüfbarem.
   und ein zusätzlicher Belohnungs-Term „Kurs halten“ exp(−(Δψ / 10°)²), Gewicht
   +0,5, weil „Drehrate halten“ langsames Abdriften kaum bestraft (2 °/s kosten
   dort nur 2 %). Abnahme mit 20-N- statt 15-N-Stoß (siehe Phase 1).
+- **1. Training am PC (19.11.2026):** 15 Mio. Schritte in 89 Minuten (12 Hunde
+  parallel, ca. 3.000 Schritte/s). Gegen den Trab auf 20 gleichen zufälligen
+  Hunden mit Stößen: Strecke 81 % → 96 %, seitliche Drift 426 → 245 mm,
+  Verdrehung 39,6° → 19,9°, Neigung 7,5° → 6,5°, Stürze 1 → 1. Kalibrierfehler
+  ±3°: 51° → 23,5° (Kriterium erfüllt). 20-N-Stoß: beide fallen. Abnahme 1 von
+  3, weil im Training nur Stöße bis 15 N vorkamen und der Trab unter
+  Randomisierung kaum fällt (1 von 20). Deshalb im Lehrplan Abschnitt 3 jetzt
+  Stöße bis 25 N. Das Sturz-Kriterium mit dem Betreuer klären (Vorschlag:
+  „übersteht 20-N-Stöße aus zufälliger Richtung“).
 
 **Phase 4: Stufe 2 und Pi-Software**
 - `model/imitation.py`: Daten mit dem Lehrer sammeln, Behavior Cloning.
