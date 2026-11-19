@@ -142,3 +142,85 @@ def test_full_mode_rewards_imitating_the_trot():
     info = env.step(np.zeros(12))[4]
     assert 0.0 < info["terms"]["nachahmung"] <= 1.0
     assert config.REWARD["full"]["nachahmung"] > 0 and config.REWARD["full"]["korrektur"] == 0.0
+
+
+def test_scenario_can_be_given_for_fair_comparisons():
+    import randomization as rnd
+    r = rnd.Randomization(floor_friction=0.5)
+    env = NovaEnv()
+    env.reset(seed=0, options={"randomization": r, "command": (150.0, 10.0)})
+    assert env.randomization is r
+    floor = env.sim.model.geom("floor").id
+    assert env.sim.model.geom_friction[floor, 0] == 0.5
+    for _ in range(300):  # 6 s: der Befehl bleibt fest
+        env.step(np.zeros(12))
+        assert (env.policy.target_speed, env.policy.target_yaw_rate) == (150.0, 10.0)
+
+
+def test_given_scenario_gives_the_same_episode_every_time():
+    import randomization as rnd
+    r = rnd.sample(np.random.default_rng(7))
+
+    def rewards():
+        env = NovaEnv()
+        env.reset(seed=1, options={"randomization": r, "command": (120.0, 0.0)})
+        return [env.step(np.zeros(12))[1] for _ in range(50)]
+    assert rewards() == rewards()
+
+
+def test_episode_end_reports_the_walked_share():
+    env = NovaEnv(randomize=False, pushes=False, episode_seconds=2.0)
+    env.reset(seed=0, options={"command": (100.0, 0.0)})
+    for _ in range(100):
+        *_, terminated, truncated, info = env.step(np.zeros(12))
+    assert truncated
+    # eigener Schlüssel "nova": "episode" belegt Stable-Baselines3 selbst
+    assert info["nova"]["strecke"] == pytest.approx(env.walked / env.commanded)
+    assert info["nova"]["umgefallen"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Kurs halten
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("actual, planned, error", [
+    (0.0, 0.0, 0.0), (15.0, 5.0, 10.0), (-30.0, 0.0, -30.0), (179.0, -179.0, -2.0), (10.0, 370.0, 0.0),
+])
+def test_course_error_in_degrees(actual, planned, error):
+    from nova_env import course_error
+    assert course_error(actual, planned) == pytest.approx(error)
+
+
+def turn_torso(env: NovaEnv, degrees: float) -> None:
+    """Rumpf um die Hochachse verdrehen (wie nach einem Abdriften)."""
+    import math
+    import mujoco
+    half = math.radians(degrees) / 2
+    env.sim.data.qpos[3:7] = (math.cos(half), 0.0, 0.0, math.sin(half))
+    mujoco.mj_forward(env.sim.model, env.sim.data)
+
+
+def test_staying_on_course_scores_full():
+    env = NovaEnv(randomize=False, pushes=False)
+    env.reset(seed=0, options={"command": (100.0, 0.0)})
+    assert env.step(np.zeros(12))[4]["terms"]["kurs"] > 0.95
+
+
+def test_drifting_off_course_costs_reward():
+    env = NovaEnv(randomize=False, pushes=False)
+    env.reset(seed=0, options={"command": (100.0, 0.0)})
+    turn_torso(env, 20.0)
+    assert env.step(np.zeros(12))[4]["terms"]["kurs"] < 0.1   # 20° daneben, Breite 10°
+
+
+def test_commanded_turn_is_the_course():
+    env = NovaEnv(randomize=False, pushes=False)
+    env.reset(seed=0, options={"command": (100.0, 20.0)})
+    for _ in range(150):
+        env.step(np.zeros(12))
+    turn_torso(env, env.policy.trot.heading)   # genau so weit gedreht wie befohlen
+    assert env.step(np.zeros(12))[4]["terms"]["kurs"] > 0.9
+
+
+def test_course_is_rewarded_in_both_stages():
+    assert config.REWARD["residual"]["kurs"] > 0 and config.REWARD["full"]["kurs"] > 0

@@ -39,6 +39,11 @@ Für Visualisierungen, Simulation und Tests braucht man am PC die Pakete aus `re
 Starten z. B. mit `.venv\Scripts\python src/kinematics.py`, `src/gait.py`, `src/sim.py` oder `model/evaluate.py`.
 Tests: `.venv\Scripts\python -m pytest` (laufen ohne Hardware, setzen `NOVA_SIM=1` selbst).
 
+Training (nur PC, Phase 3): zusätzlich PyTorch nur für die CPU und `model/requirements.txt` (Befehle stehen oben in der Datei). Dann:
+`python model/train.py --quick` (Probelauf), `python model/train.py` (ganzer Lehrplan), Lernkurven mit `tensorboard --logdir runs`,
+danach `python model/evaluate.py --policy checkpoints/<lauf>/final.zip` und `python model/export_onnx.py checkpoints/<lauf>/final.zip`.
+`checkpoints/` und `runs/` sind in `.gitignore`, fertige Netze kommen nach `model/policies/` (werden committet).
+
 ## Am Pi
 
 Zwei getrennte Ordner, damit schnelle Tests nie mit Git kollidieren:
@@ -96,9 +101,14 @@ Zwei getrennte Ordner, damit schnelle Tests nie mit Git kollidieren:
   - `ResidualMode` (Stufe 1): Trab + Korrektur der Fußpunkte (±20/±10/±15 mm). Ausgabe 0 = genau der klassische Trab.
   - `FullMode` (Stufe 2): Netz gibt die Gelenkwinkel vor (±30°, Schulter ±15°, höchstens 400 °/s), Trab läuft als Taktgeber und Vorbild (`reference`) mit.
   - Befehl mit `set_command(tempo, drehrate)`, wird weich angefahren.
+  - `OnnxNetwork(pfad)` führt ein fertiges Netz aus (braucht nur onnxruntime). `settings(mode)` beschreibt alle Skalierungen; beim Training als `settings.json` gespeichert, beim Export als `.json` neben das Netz. `check_settings()` verweigert Netze, die mit anderen Einstellungen trainiert wurden.
 - `model/config.py`: Zahlen der Trainingsumgebung (Episode 10 s, Befehle, Abbruch, Gewichte der Belohnung je Stufe).
-- `model/nova_env.py`: Trainingsumgebung im Gymnasium-Format (`NovaEnv(mode="residual"|"full", randomize, pushes, max_yaw_rate)`). Würfelt bei jedem `reset()` einen neuen Hund, Belohnung nach Plan-Tabelle 4.1, Abbruch beim Umfallen.
+- `model/nova_env.py`: Trainingsumgebung im Gymnasium-Format (`NovaEnv(mode="residual"|"full", randomize, pushes, max_yaw_rate)`). Würfelt bei jedem `reset()` einen neuen Hund, Belohnung nach Plan-Tabelle 4.1 plus Term „kurs“ (Abweichung vom befohlenen Kurs, Breite 10°, weil langsames Abdriften sonst kaum kostet), Abbruch beim Umfallen.
   - Ca. 630 Schritte/s am Laptop. Korrektur 0 läuft nominal ohne Umfallen durch (87 % der befohlenen Strecke), ein zufälliges Netz fällt meist um.
+  - Feste Szenarien für Vergleiche: `env.reset(seed=0, options={"randomization": r, "command": (150.0, 0.0)})`. Am Episodenende steht in `info["nova"]` die gelaufene Strecke und ob Nova umgefallen ist.
+- `model/train.py`: PPO-Training (Stable-Baselines3) nach Lehrplan aus `config.CURRICULUM`: ohne Zufall (2 Mio.), randomisiert (6 Mio.), mit Stößen (7 Mio. Schritte). So viele Hunde parallel wie CPU-Threads. Anfangs-Zufall `LOG_STD_INIT` -2,0 statt -1,0 aus dem Plan (mit -1,0 läuft der Trab beim Ausprobieren nur 12 % der Strecke). Zwischenstände in `checkpoints/<lauf>/`, Lernkurven inkl. aller Belohnungs-Terme in `runs/`. Stufe 2 kommt in Phase 4.
+- `model/export_onnx.py`: `final.zip` -> `model/policies/<name>.onnx` + `.json`, vergleicht danach Original und ONNX (braucht onnxruntime, gibt es für Python 3.15 unter Windows noch nicht -> am Laptop machen).
+- `model/evaluate.py --policy <.zip|.onnx>`: Trab ohne Netz gegen Trab mit Netz auf denselben Hunden (Szenarien + 20 randomisierte Episoden mit Stößen, 150 mm/s), hakt die Abnahme-Kriterien aus Phase 3 ab.
 - `tests/`: pytest für alle Module (ohne Hardware).
 
 ## Nächste Schritte
@@ -106,4 +116,4 @@ Zwei getrennte Ordner, damit schnelle Tests nie mit Git kollidieren:
 1. Inverse Kinematik für ein Bein: erledigt (`src/kinematics.py`). Offen: Beinlängen aus den STL-Dateien des Thingiverse-Modells abmessen.
 2. Grundposen und Gang: erledigt (`src/gait.py`), mit Drehen. Kalibrierung Kinematik-Winkel -> Servo-Winkel steht in `servos.py` (Platzhalter-Nullpunkte). Offen: Nullpunkte und Grenzen am echten Hund ausmessen.
 3. Simulation: Phase 1 aus `docs/neuronales-netz-plan.md` erledigt (Servo-Modell, IMU, Randomisierung, Auswertung). MuJoCo statt PyBullet, weil es PyBullet für Windows nicht als fertiges Paket gibt. Offen: echte Massen, Schwerpunkt und Servo-Messungen (Kp, Totzeit) eintragen.
-4. Neuronales Netz per Reinforcement Learning in der Simulation am PC trainieren, als ONNX auf den Pi bringen. Der klassische Gang bleibt als Rückfallebene. Phase 2 (Trainingsumgebung) ist erledigt. Nächster Schritt ist Phase 3 im Plan: Training Stufe 1 am PC (`model/train.py` mit stable-baselines3 und torch).
+4. Neuronales Netz per Reinforcement Learning in der Simulation am PC trainieren, als ONNX auf den Pi bringen. Der klassische Gang bleibt als Rückfallebene. Phase 2 (Trainingsumgebung) ist erledigt, der Code für Phase 3 (Training, Export, Vergleich) steht. Nächster Schritt: das echte Training von Stufe 1 am PC laufen lassen und mit `evaluate.py --policy` gegen den Trab prüfen.

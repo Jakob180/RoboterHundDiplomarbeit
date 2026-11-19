@@ -12,6 +12,14 @@ Anhalten) in der Simulation ab, und zwar
 
 Der offene Trab reagiert nicht auf die IMU. Der IMU-Fehler zeigt nur, wie gut
 der Filter aus src/imu.py die echte Lage trifft (wichtig fürs Netz später).
+
+Phase 3: trainiertes Netz gegen den Trab ohne Netz, mit denselben Hunden,
+Stößen und Zufallszahlen, 10-s-Episoden mit 150 mm/s geradeaus:
+
+    python model/evaluate.py --policy checkpoints/<lauf>/final.zip
+    python model/evaluate.py --policy model/policies/nova_residual_v1.onnx
+
+Am Ende stehen die Abnahme-Kriterien aus dem Plan (Phase 3).
 """
 
 from __future__ import annotations
@@ -19,6 +27,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from typing import NamedTuple
 
@@ -28,7 +37,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from gait import Frame, demo_frames  # noqa: E402
 from imu import ComplementaryFilter  # noqa: E402
+import config  # noqa: E402
 from kinematics import LEGS  # noqa: E402
+from nova_env import NovaEnv  # noqa: E402
+from policy import N_ACTIONS, OnnxNetwork, check_settings  # noqa: E402
 from randomization import Push, Randomization, apply, sample  # noqa: E402
 from sim import CONTROL_HZ, NovaSim, ServoParams  # noqa: E402
 
@@ -142,6 +154,149 @@ SCENARIOS: dict[str, Randomization] = {
 
 
 # ---------------------------------------------------------------------------
+# Phase 3: Trab ohne Netz gegen Trab mit Netz
+# ---------------------------------------------------------------------------
+
+COMMAND = (150.0, 0.0)  # mm/s und °/s, wie im Ablauf aus Phase 1
+ENV_PUSH_TIME = 5.5     # s ab Start der Simulation (nach 0,5 s Stehen), mitten im Lauf
+
+ACCEPT_FALLS = "Randomisiert mit Stößen: höchstens halb so oft umgefallen"
+ACCEPT_PUSH = "Seitenstoß 20 N überstanden"
+ACCEPT_CALIBRATION = "Kalibrierfehler ±3°: höchstens halb so stark abgedreht"
+
+Network = Callable[[np.ndarray], np.ndarray]
+
+
+class PolicyResult(NamedTuple):
+    fallen_at: float | None  # s, wann Nova umgefallen ist (None = nicht umgefallen)
+    distance: float | None   # gelaufene Strecke als Anteil des Befehls
+    drift: float | None      # mm seitlich abgedriftet (+ = nach links)
+    yaw: float | None        # Grad gedreht (+ = nach links)
+    max_tilt: float          # Grad, größte Neigung (Roll oder Pitch)
+
+
+def _env_push(force: float) -> list[Push]:
+    return [Push(ENV_PUSH_TIME, (0.0, force, 0.0), 0.2)]
+
+
+POLICY_SCENARIOS: dict[str, Randomization] = {
+    "Standard": Randomization(),
+    "Kalibrierfehler ±3°": SCENARIOS["Kalibrierfehler ±3°"],
+    "Spiel 2°": Randomization(servo=ServoParams(deadband=np.radians(2.0))),
+    "Reibung 0,4": Randomization(floor_friction=0.4),
+    "Seitenstoß 15 N": Randomization(pushes=_env_push(15.0)),
+    "Seitenstoß 20 N": Randomization(pushes=_env_push(20.0)),
+    "Seitenstoß 25 N": Randomization(pushes=_env_push(25.0)),
+}
+
+
+def run_policy_episode(
+    r: Randomization, network: Network | None = None, mode: str = "residual", command=COMMAND,
+) -> PolicyResult:
+    """Eine Episode in der Trainingsumgebung. network=None: Trab ohne Netz."""
+    env = NovaEnv(mode=mode if network is not None else "residual")
+    obs, _ = env.reset(seed=0, options={"randomization": r, "command": command})
+    tilt = 0.0
+    while True:
+        action = np.zeros(N_ACTIONS) if network is None else network(obs)
+        obs, _, fallen, truncated, _ = env.step(action)
+        state = env.sim.torso()
+        tilt = max(tilt, abs(state.roll), abs(state.pitch))
+        if fallen:
+            return PolicyResult(round(env.sim.data.time, 3), None, None, None, tilt)
+        if truncated:
+            return PolicyResult(None, env.walked / env.commanded, state.y, state.yaw, tilt)
+
+
+def _summary(results: list[PolicyResult]) -> dict[str, float | int | None]:
+    walkers = [r for r in results if r.fallen_at is None]
+
+    def mean(values):
+        return float(np.mean(values)) if values else None
+
+    return {
+        "Episoden": len(results),
+        "umgefallen": len(results) - len(walkers),
+        "Strecke Mittel": mean([w.distance for w in walkers]),
+        "|Drift| Mittel [mm]": mean([abs(w.drift) for w in walkers]),
+        "|Gier| Mittel [°]": mean([abs(w.yaw) for w in walkers]),
+        "Neigung max Mittel [°]": mean([w.max_tilt for w in walkers]),
+    }
+
+
+def compare(
+    network: Network, mode: str = "residual", episodes: int = 20, seed: int = 0,
+    scenarios: dict[str, Randomization] = POLICY_SCENARIOS,
+) -> dict:
+    """Trab und Netz in denselben Szenarien und auf denselben zufälligen Hunden (mit Stößen)."""
+    out: dict = {"Szenarien": {}, "Randomisiert": {}}
+    for name, r in scenarios.items():
+        out["Szenarien"][name] = {
+            "Trab": run_policy_episode(r)._asdict(),
+            "Netz": run_policy_episode(r, network, mode)._asdict(),
+        }
+    duration = config.EPISODE_SECONDS + config.WARMUP_SECONDS
+    dogs = [sample(np.random.default_rng((seed, i)), True, duration) for i in range(episodes)]
+    out["Randomisiert"]["Trab"] = _summary([run_policy_episode(r) for r in dogs])
+    out["Randomisiert"]["Netz"] = _summary([run_policy_episode(r, network, mode) for r in dogs])
+    return out
+
+
+def acceptance(out: dict) -> dict[str, bool]:
+    """Abnahme-Kriterien aus dem Plan (Phase 3), mit 20 N statt 15 N (15 N schafft schon der Trab)."""
+    trab, netz = out["Randomisiert"]["Trab"]["umgefallen"], out["Randomisiert"]["Netz"]["umgefallen"]
+    falls = netz <= trab / 2 if trab > 0 else netz == 0
+    push = out["Szenarien"].get("Seitenstoß 20 N")
+    pushed = push is not None and push["Netz"]["fallen_at"] is None
+    cal = out["Szenarien"].get("Kalibrierfehler ±3°")
+    if cal is None or cal["Netz"]["fallen_at"] is not None:
+        turned = False
+    elif cal["Trab"]["yaw"] is None:  # Trab umgefallen, Netz nicht
+        turned = True
+    else:
+        turned = abs(cal["Netz"]["yaw"]) <= abs(cal["Trab"]["yaw"]) / 2
+    return {ACCEPT_FALLS: falls, ACCEPT_PUSH: pushed, ACCEPT_CALIBRATION: turned}
+
+
+def load_network(path) -> tuple[Network, str]:
+    """Netz aus .zip (Training, braucht stable-baselines3) oder .onnx laden. Gibt (Netz, Modus) zurück."""
+    path = Path(path)
+    if path.suffix == ".onnx":
+        net = OnnxNetwork(path)
+        return net, net.mode
+    if path.suffix == ".zip":
+        from stable_baselines3 import PPO
+
+        meta = json.loads((path.parent / "settings.json").read_text(encoding="utf-8"))
+        check_settings(meta, path.name)
+        model = PPO.load(path, device="cpu")
+        return (lambda obs: model.predict(obs, deterministic=True)[0]), meta["mode"]
+    raise ValueError(f"Unbekanntes Format: {path.name} (erwartet .zip oder .onnx)")
+
+
+def _cell(r: dict) -> str:
+    if r["fallen_at"] is not None:
+        return f"fällt bei {r['fallen_at']:4.1f} s".ljust(31)
+    return f"{100 * r['distance']:4.0f} %  {r['drift']:+5.0f} mm / {r['yaw']:+5.1f}°  {r['max_tilt']:4.1f}°"
+
+
+def print_comparison(out: dict) -> None:
+    print(f"  {'Szenario':22s} {'Trab ohne Netz':31s} | Trab mit Netz")
+    print(f"  {'':22s} {'Strecke, seitlich/gedreht, Neig.':31s} |")
+    for name, pair in out["Szenarien"].items():
+        print(f"  {name:22s} {_cell(pair['Trab'])} | {_cell(pair['Netz'])}")
+    n = out["Randomisiert"]["Trab"]["Episoden"]
+    print(f"\nRandomisiert mit Stößen ({n} gleiche Hunde):")
+    for key in out["Randomisiert"]["Trab"]:
+        a, b = out["Randomisiert"]["Trab"][key], out["Randomisiert"]["Netz"][key]
+        show = (lambda v: "–" if v is None else f"{v:.3g}")
+        print(f"  {key:24s} Trab {show(a):>7s} | Netz {show(b):>7s}")
+    print("\nAbnahme (Plan Phase 3):")
+    for text, ok in acceptance(out).items():
+        print(f"  [{'x' if ok else ' '}] {text}")
+
+
+# ---------------------------------------------------------------------------
 # Ausgabe
 # ---------------------------------------------------------------------------
 
@@ -168,7 +323,19 @@ def main() -> None:
     parser.add_argument("--episodes", type=int, default=20, help="zufällige Durchläufe je Gruppe")
     parser.add_argument("--seed", type=int, default=0, help="Startwert der Zufallszahlen")
     parser.add_argument("--json", help="Ergebnisse zusätzlich als JSON-Datei speichern")
+    parser.add_argument("--policy", help="Netz (.zip oder .onnx) gegen den Trab vergleichen")
     args = parser.parse_args()
+
+    if args.policy:
+        network, mode = load_network(args.policy)
+        print(f"Vergleich: {args.policy} (Modus {mode}), 10 s mit {COMMAND[0]:.0f} mm/s geradeaus\n")
+        out = compare(network, mode, args.episodes, args.seed)
+        print_comparison(out)
+        if args.json:
+            Path(args.json).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.json).write_text(json.dumps(_rounded(out), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            print(f"\nGespeichert: {args.json}")
+        return
 
     frames = demo_frames(CONTROL_HZ)
     out: dict = {"Einstellungen": {"episodes": args.episodes, "seed": args.seed}, "Szenarien": {}, "Randomisiert": {}}

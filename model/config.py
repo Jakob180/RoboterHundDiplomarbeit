@@ -24,12 +24,14 @@ FALL_TILT = 40.0             # Grad Neigung
 SPEED_SIGMA = 0.05           # m/s
 YAW_SIGMA = 0.3              # rad/s
 IMITATION_SIGMA = 0.3        # rad (alle 12 Gelenke zusammen)
+COURSE_SIGMA = 10.0          # Grad Abweichung vom befohlenen Kurs
 TORQUE_LIMIT = 0.95          # ab diesem Anteil des Blockiermoments zählt "am Anschlag"
 
 # Gewichte der Belohnung (Plan-Tabelle 4.1). Die Terme selbst stehen in nova_env.py.
 _STAGE_1 = {
     "tempo": 1.0,         # befohlenes Tempo halten
     "drehrate": 0.5,      # befohlene Drehrate halten (geradeaus: nicht abdriften)
+    "kurs": 0.5,          # Richtung seit dem Start wie befohlen (bestraft auch langsames Abdriften)
     "rutschen": -2.0,     # seitlich wegrutschen
     "neigung": -2.0,      # Rumpf schief
     "wackeln": -0.05,     # Drehrate um Längs- und Querachse
@@ -47,4 +49,34 @@ REWARD = {
     # Größe würde das Laufen bestrafen. Nachahmen wird im Training später ausgeblendet
     # (1,0 -> 0,2). Fußrutschen und Fußhöhe kommen mit Phase 4.
     "full": {**_STAGE_1, "korrektur": 0.0, "ruckeln": -1.0, "nachahmung": 1.0},
+}
+
+# ---------------------------------------------------------------------------
+# Training (Plan 4.1 und Phase 3), Stable-Baselines3 PPO
+# ---------------------------------------------------------------------------
+
+PPO_SETTINGS = {
+    "n_steps": 1024,         # Schritte je Hund, bevor das Netz angepasst wird
+    "batch_size": 2048,
+    "n_epochs": 10,
+    "learning_rate": 3e-4,
+    "gamma": 0.99,           # wie weit das Netz in die Zukunft denkt (ca. 100 Schritte = 2 s)
+    "gae_lambda": 0.95,
+    "clip_range": 0.2,
+}
+NET_ARCH = [128, 128]        # 2 Schichten mit je 128 Neuronen, Actor und Critic getrennt
+# Zufallsausschläge am Anfang (Standardabweichung e^-2 = 0,14). Gemessen ohne Training:
+# mit -1,0 (Plan) läuft der Trab beim Ausprobieren nur 12 % der Strecke, mit -2,0 noch 79 %.
+LOG_STD_INIT = -2.0
+CHECKPOINT_EVERY = 1_000_000  # Schritte zwischen zwei Zwischenständen
+
+# Lehrplan je Stufe: (Name, Millionen Schritte, Randomisierung, Stöße).
+# Erst ohne Zufall (lernt es überhaupt?), dann ein zufälliger Hund je Episode, dann Stöße.
+CURRICULUM = {
+    "residual": [
+        ("1-ohne-zufall", 2.0, False, False),
+        ("2-randomisiert", 6.0, True, False),
+        ("3-mit-stoessen", 7.0, True, True),
+    ],
+    # Stufe 2 startet mit Nachahmen (Behavior Cloning) und kommt in Phase 4.
 }

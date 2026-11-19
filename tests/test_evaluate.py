@@ -76,3 +76,70 @@ def test_phase1_baseline_stays_reproducible():
     again = evaluate.run_episode(FRAMES, r)._asdict()
     for key, value in first.items():
         assert again[key] == pytest.approx(value, abs=1e-3), key
+
+
+# ---------------------------------------------------------------------------
+# Vergleich Trab ohne Netz gegen Trab mit Netz (Phase 3)
+# ---------------------------------------------------------------------------
+
+def test_trot_without_network_walks_in_the_comparison():
+    result = evaluate.run_policy_episode(rnd.Randomization())
+    assert result.fallen_at is None
+    assert result.distance > 0.7
+    assert result.max_tilt < 10.0
+
+
+def test_network_that_outputs_zero_is_the_trot():
+    r = evaluate.POLICY_SCENARIOS["Kalibrierfehler ±3°"]
+    assert evaluate.run_policy_episode(r, lambda obs: np.zeros(12)) == evaluate.run_policy_episode(r)
+
+
+def test_strong_push_in_the_comparison_tilts_more():
+    calm = evaluate.run_policy_episode(rnd.Randomization())
+    pushed = evaluate.run_policy_episode(evaluate.POLICY_SCENARIOS["Seitenstoß 15 N"])
+    assert pushed.max_tilt > calm.max_tilt + 2.0
+
+
+def test_compare_runs_trot_and_network_on_the_same_dogs():
+    out = evaluate.compare(lambda obs: np.zeros(12), episodes=1, scenarios={"Standard": rnd.Randomization()})
+    assert out["Szenarien"]["Standard"]["Trab"] == out["Szenarien"]["Standard"]["Netz"]
+    assert out["Randomisiert"]["Trab"] == out["Randomisiert"]["Netz"]
+    assert out["Randomisiert"]["Trab"]["Episoden"] == 1
+
+
+def test_acceptance_criteria_from_the_plan():
+    def result(fallen=None, yaw=0.0):
+        return evaluate.PolicyResult(fallen, None if fallen else 0.9, 0.0, None if fallen else yaw, 5.0)
+    out = {
+        "Szenarien": {
+            "Seitenstoß 20 N": {"Trab": result(fallen=6.0)._asdict(), "Netz": result()._asdict()},
+            "Kalibrierfehler ±3°": {"Trab": result(yaw=40.0)._asdict(), "Netz": result(yaw=-15.0)._asdict()},
+        },
+        "Randomisiert": {"Trab": {"umgefallen": 6}, "Netz": {"umgefallen": 2}},
+    }
+    assert evaluate.acceptance(out) == {evaluate.ACCEPT_FALLS: True, evaluate.ACCEPT_PUSH: True,
+                                        evaluate.ACCEPT_CALIBRATION: True}
+    out["Randomisiert"]["Netz"]["umgefallen"] = 4    # nur ein Drittel weniger: nicht "deutlich"
+    out["Szenarien"]["Kalibrierfehler ±3°"]["Netz"] = result(yaw=25.0)._asdict()  # nicht halbiert
+    out["Szenarien"]["Seitenstoß 20 N"]["Netz"] = result(fallen=6.2)._asdict()
+    assert evaluate.acceptance(out) == {evaluate.ACCEPT_FALLS: False, evaluate.ACCEPT_PUSH: False,
+                                        evaluate.ACCEPT_CALIBRATION: False}
+
+
+def test_networks_load_from_zip_and_onnx(tmp_path):
+    pytest.importorskip("stable_baselines3")
+    pytest.importorskip("onnxruntime")
+    import json
+    from stable_baselines3 import PPO
+    import export_onnx
+    import policy
+    from nova_env import NovaEnv
+    env = NovaEnv(randomize=False, pushes=False)
+    PPO("MlpPolicy", env, device="cpu", seed=0, policy_kwargs=dict(net_arch=[8])).save(tmp_path / "final.zip")
+    (tmp_path / "settings.json").write_text(json.dumps(policy.settings(env.policy)), encoding="utf-8")
+    export_onnx.export(tmp_path / "final.zip", tmp_path / "netz.onnx")
+    obs = np.random.default_rng(0).normal(size=34).astype(np.float32)
+    from_zip, mode_zip = evaluate.load_network(tmp_path / "final.zip")
+    from_onnx, mode_onnx = evaluate.load_network(tmp_path / "netz.onnx")
+    assert mode_zip == mode_onnx == "residual"
+    assert from_zip(obs) == pytest.approx(np.clip(from_onnx(obs), -1, 1), abs=1e-5)

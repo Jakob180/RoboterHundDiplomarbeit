@@ -21,18 +21,29 @@ Zwei Stufen:
 Sicherheit: Ungültige Ausgaben (NaN) zählen als 0, alles wird auf -1..1
 begrenzt, die Gelenkwinkel auf die Grenzen aus servos.py. Am echten Hund
 begrenzt servos.py danach noch einmal. Noch nicht auf der Hardware getestet.
+
+Fertiges Netz ausführen (braucht onnxruntime, nicht PyTorch):
+    netz = OnnxNetwork("model/policies/nova_residual_v1.onnx")
+    aktion = netz(obs)
+Zu jeder .onnx gehört eine .json mit den Einstellungen aus dem Training
+(settings()). Passt sie nicht zu dieser Datei, verweigert OnnxNetwork den Start.
 """
 
 from __future__ import annotations
 
+import json
 import math
 from collections import deque
+from pathlib import Path
 
 import numpy as np
 
 from gait import STAND, Trot
 from kinematics import LEGS, LegAngles, body_ik, foot_ik
 from servos import JOINT_ORDER, kinematic_limits
+
+CONTROL_HZ = 50.0                 # Steuertakt, wie in sim.py und am Pi
+FORMAT_VERSION = 1                # Version der .json zu einem Netz
 
 # Skalierung der Beobachtung (Plan 4.1). Fest statt gelernt, damit am Pi nichts fehlen kann.
 GYRO_SCALE = 4.0                  # rad/s
@@ -80,6 +91,7 @@ STAND_ANGLES = joint_array(body_ik(STAND.feet, STAND.body))
 class _Mode:
     """Was beide Stufen gemeinsam haben: Befehl, Trab als Taktgeber, letzte Aktion."""
 
+    name = ""
     n_obs = 34
     n_actions = N_ACTIONS
 
@@ -137,6 +149,8 @@ class _Mode:
 class ResidualMode(_Mode):
     """Stufe 1: klassischer Trab, das Netz korrigiert die Fußpunkte."""
 
+    name = "residual"
+
     def reset(self) -> None:
         super().reset()
         self.correction = np.zeros(N_ACTIONS)  # mm je Fuß (x, y, z), geglättet
@@ -176,6 +190,8 @@ class ResidualMode(_Mode):
 class FullMode(_Mode):
     """Stufe 2: Das Netz gibt die Gelenkwinkel vor, der Trab ist Taktgeber und Vorbild."""
 
+    name = "full"
+
     def reset(self) -> None:
         super().reset()
         self.reference = STAND_ANGLES.copy()  # Gelenkwinkel des Trabs (Vorbild fürs Nachahmen)
@@ -202,3 +218,70 @@ class FullMode(_Mode):
         self.angles = self.angles + np.clip(target - self.angles, -step, step)
         self.last_action = a
         return joint_dict(self.angles)
+
+
+# ---------------------------------------------------------------------------
+# Einstellungen und fertiges Netz
+# ---------------------------------------------------------------------------
+
+def settings(mode: _Mode) -> dict:
+    """Alles, was Beobachtung und Aktion festlegt. Kommt beim Export als .json neben das Netz."""
+    period, step_height, duty = mode._trot_settings
+    return {
+        "version": FORMAT_VERSION,
+        "mode": mode.name,
+        "n_obs": mode.n_obs,
+        "n_actions": mode.n_actions,
+        "joint_order": list(JOINT_ORDER),
+        "control_hz": CONTROL_HZ,
+        "scales": {
+            "gyro": GYRO_SCALE,
+            "max_speed": MAX_SPEED,
+            "max_yaw_rate": MAX_YAW_RATE,
+            "angle": ANGLE_SCALE,
+            "obs_clip": OBS_CLIP,
+            "speed_ramp": SPEED_RAMP,
+            "yaw_ramp": YAW_RAMP,
+            "foot": list(FOOT_SCALE),
+            "smoothing": SMOOTHING,
+            "joint": dict(JOINT_SCALE),
+            "max_joint_speed": MAX_JOINT_SPEED,
+        },
+        "trot": {"period": period, "step_height": step_height, "duty": duty},
+    }
+
+
+def _differences(expected, found, prefix: str = "") -> list[str]:
+    """Wo eine Einstellung fehlt oder abweicht, z. B. ["scales.gyro"]. Zusätzliche Infos (z. B. "source") zählen nicht."""
+    if isinstance(expected, dict) and isinstance(found, dict):
+        return [d for k in expected for d in _differences(expected[k], found.get(k), f"{prefix}{k}.")]
+    return [] if expected == found else [prefix.rstrip(".")]
+
+
+def check_settings(found: dict, name: str = "Netz", mode: _Mode | None = None) -> None:
+    """ValueError, wenn ein Netz mit anderen Einstellungen trainiert wurde, als diese policy.py hat."""
+    if mode is None:
+        mode = {"residual": ResidualMode, "full": FullMode}.get(found.get("mode"), ResidualMode)()
+    wrong = _differences(settings(mode), found)
+    if wrong:
+        raise ValueError(f"{name} wurde mit anderen Einstellungen trainiert als in policy.py: {', '.join(wrong)}")
+
+
+class OnnxNetwork:
+    """Ein fertig trainiertes Netz (aus model/export_onnx.py) ausführen. Braucht onnxruntime."""
+
+    def __init__(self, path, mode: _Mode | None = None) -> None:
+        import onnxruntime  # erst hier, damit policy.py auch ohne onnxruntime läuft
+
+        path = Path(path)
+        self.settings = json.loads(path.with_suffix(".json").read_text(encoding="utf-8"))
+        self.mode = self.settings.get("mode")
+        check_settings(self.settings, path.name, mode)
+        options = onnxruntime.SessionOptions()
+        options.intra_op_num_threads = 1  # gleichmäßiger Takt, das Netz ist winzig
+        self._session = onnxruntime.InferenceSession(str(path), options, providers=["CPUExecutionProvider"])
+
+    def __call__(self, obs) -> np.ndarray:
+        """34 Eingänge -> 12 Ausgaben (noch nicht begrenzt, das macht mode.act())."""
+        x = np.asarray(obs, dtype=np.float32).reshape(1, -1)
+        return self._session.run(["action"], {"obs": x})[0][0].astype(float)

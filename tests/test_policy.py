@@ -209,3 +209,63 @@ def test_reset_starts_over(mode):
     fresh = mode()
     assert m.observe(*LEVEL) == pytest.approx(fresh.observe(*LEVEL))
     assert (m.speed, m.target_speed, m.trot.phase) == (0.0, 0.0, 0.0)
+
+
+# ---------------------------------------------------------------------------
+# Einstellungen und fertiges Netz (ONNX)
+# ---------------------------------------------------------------------------
+
+def test_control_rate_is_the_same_as_in_the_simulation():
+    import sim
+    assert policy.CONTROL_HZ == sim.CONTROL_HZ
+
+
+@pytest.mark.parametrize("mode, name", [(policy.ResidualMode, "residual"), (policy.FullMode, "full")])
+def test_settings_describe_everything_the_observation_needs(mode, name):
+    import json
+    s = policy.settings(mode())
+    assert s["mode"] == name
+    assert (s["n_obs"], s["n_actions"]) == (34, 12)
+    assert s["joint_order"] == JOINT_ORDER
+    assert s["scales"]["gyro"] == policy.GYRO_SCALE
+    assert s["scales"]["foot"] == list(policy.FOOT_SCALE)
+    assert s["trot"] == {"period": 0.5, "step_height": 25.0, "duty": 0.6}
+    assert json.loads(json.dumps(s)) == s
+
+
+def write_linear_network(path, weights, bias, meta) -> None:
+    """Kleines Test-Netz: Aktion = obs · weights + bias, mit .json daneben."""
+    import json
+    onnx = pytest.importorskip("onnx")
+    from onnx import TensorProto, helper, numpy_helper
+    graph = helper.make_graph(
+        [helper.make_node("MatMul", ["obs", "W"], ["xw"]), helper.make_node("Add", ["xw", "b"], ["action"])],
+        "test",
+        [helper.make_tensor_value_info("obs", TensorProto.FLOAT, ["batch", 34])],
+        [helper.make_tensor_value_info("action", TensorProto.FLOAT, ["batch", 12])],
+        [numpy_helper.from_array(weights.astype(np.float32), "W"), numpy_helper.from_array(bias.astype(np.float32), "b")],
+    )
+    model = helper.make_model(graph, opset_imports=[helper.make_opsetid("", 17)])
+    model.ir_version = 8
+    onnx.save(model, str(path))
+    path.with_suffix(".json").write_text(json.dumps(meta), encoding="utf-8")
+
+
+def test_onnx_network_computes_the_actions(tmp_path):
+    pytest.importorskip("onnxruntime")
+    rng = np.random.default_rng(0)
+    w, b = rng.normal(size=(34, 12)), rng.normal(size=12)
+    write_linear_network(tmp_path / "netz.onnx", w, b, policy.settings(policy.ResidualMode()))
+    net = policy.OnnxNetwork(tmp_path / "netz.onnx")
+    assert net.mode == "residual"
+    obs = rng.normal(size=34).astype(np.float32)
+    assert net(obs) == pytest.approx(obs @ w + b, abs=1e-4)
+
+
+def test_onnx_network_refuses_other_settings(tmp_path):
+    pytest.importorskip("onnxruntime")
+    meta = policy.settings(policy.ResidualMode())
+    meta["scales"]["gyro"] = 2.0  # z. B. mit einer älteren policy.py trainiert
+    write_linear_network(tmp_path / "netz.onnx", np.zeros((34, 12)), np.zeros(12), meta)
+    with pytest.raises(ValueError, match="scales.gyro"):
+        policy.OnnxNetwork(tmp_path / "netz.onnx")

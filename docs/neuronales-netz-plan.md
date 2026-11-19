@@ -723,6 +723,17 @@ Jede Phase endet mit etwas Prüfbarem.
   Episoden als der Trab, fällt bei einem 15-N-Stoß nicht um, und die Drehung
   bei ±3° Kalibrierfehler sinkt mindestens auf die Hälfte.
 
+- **Stand 18.11.2026: Code fertig** (lokal), Training am PC offen. `model/train.py`
+  (Lehrplan 2 / 6 / 7 Mio. Schritte), `model/export_onnx.py` (Gegenprobe mit
+  onnxruntime), `model/evaluate.py --policy` (Trab gegen Netz, prüft die
+  Abnahme), `policy.OnnxNetwork` mit Prüfung der Einstellungen. Lerntest am
+  Laptop (400.000 Schritte ohne Zufall): Das Netz lernt (Punkte 32 → 261).
+  Zwei Änderungen gegenüber dem Plan: `log_std_init` −2,0 statt −1,0 (mit −1,0
+  läuft der Trab beim Ausprobieren nur 12 % der Strecke, mit −2,0 noch 79 %)
+  und ein zusätzlicher Belohnungs-Term „Kurs halten“ exp(−(Δψ / 10°)²), Gewicht
+  +0,5, weil „Drehrate halten“ langsames Abdriften kaum bestraft (2 °/s kosten
+  dort nur 2 %). Abnahme mit 20-N- statt 15-N-Stoß (siehe Phase 1).
+
 **Phase 4: Stufe 2 und Pi-Software**
 - `model/imitation.py`: Daten mit dem Lehrer sammeln, Behavior Cloning.
 - `model/train.py --mode full`: PPO-Feinschliff mit ausgeblendeter

@@ -1,0 +1,17 @@
+# Training am PC (Phase 3), zusätzlich zu requirements-pc.txt.
+#
+# Zuerst PyTorch nur für die CPU (spart viel Platz, die Grafikkarte bringt hier nichts):
+#   .venv\Scripts\python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+# dann der Rest:
+#   .venv\Scripts\python -m pip install -r model/requirements.txt
+# (Linux: .venv/bin/python statt .venv\Scripts\python)
+#
+# Am Laptop getestet mit: torch 2.15.0, stable-baselines3 2.9.2, tensorboard 2.21.0,
+# onnx 1.23.2, onnxscript 0.7.2, onnxruntime 1.32.0.
+stable-baselines3
+tensorboard
+onnx
+onnxscript
+# onnxruntime gibt es für Python 3.15 unter Windows noch nicht. Dann den ONNX-Vergleich
+# (model/export_onnx.py) am Laptop wiederholen.
+onnxruntime; python_version < "3.15"
