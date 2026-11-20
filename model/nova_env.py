@@ -137,6 +137,14 @@ class NovaEnv(gym.Env):
             info["nova"] = {"strecke": share, "umgefallen": float(fallen)}
         return obs, float(reward), fallen, truncated, info
 
+    @property
+    def last_imu(self) -> tuple[tuple[float, ...], tuple[float, ...]]:
+        """Zuletzt gelesener Lagesensor: (Richtung oben aus dem Filter, Drehrate in rad/s).
+
+        Daraus ist auch die letzte Beobachtung gebaut, z. B. für den Lehrer in model/imitation.py.
+        """
+        return tuple(float(v) for v in self.filter.up), tuple(float(v) for v in self._gyro)
+
     # -----------------------------------------------------------------------
     # Innenleben
     # -----------------------------------------------------------------------

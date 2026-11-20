@@ -805,6 +805,17 @@ Jede Phase endet mit etwas Prüfbarem.
   `train.py --push-training checkpoints/residual-20261119-1725/final.zip`.
   Steigt die Stoßgrenze nicht, ist das der Beleg, dass Stufe 1 Stöße nicht
   besser abfängt als der Trab, und die Stoßfestigkeit wird Ziel von Stufe 2.
+  **Ergebnis (Netz 4, 42 min am PC):** Stoßgrenze 18/16 N, genau wie Netz 2
+  (Trab 17/19 N). Strecke 93 %, Abdrehen 18,0°, Kalibrierfehler 33° (schlechter
+  als Netz 2 mit 16°). Abnahme 2 von 4.
+- **Fazit Stufe 1 (20.11.2026):** Vier Netze, zwei Gegenversuche (±40 mm
+  Fußkorrektur, gezieltes Stoßtraining): Keins hält stärkere Seitenstöße aus
+  als der Trab (alle 16 bis 19 N). Stufe 1 verbessert Strecke (81 → 96 %),
+  Kurs (39,6° → 16,7°) und Kalibrierfehler (51° → 16°) deutlich, die
+  Stoßfestigkeit nicht. Grund: Der Trab gibt Takt und Schrittfolge vor, das
+  Netz kann keinen schnellen Ausfallschritt machen. Bestes Netz der Stufe 1:
+  Netz 2 (`residual-20261119-1725`, 3 von 4 Kriterien). Die Stoßfestigkeit
+  wird Ziel von Stufe 2 (mit dem Betreuer bestätigen).
 
 **Phase 4: Stufe 2 und Pi-Software**
 - `model/imitation.py`: Daten mit dem Lehrer sammeln, Behavior Cloning.
@@ -814,6 +825,12 @@ Jede Phase endet mit etwas Prüfbarem.
   Stufe 1 neu trainieren.
 - `src/distance.py`, `src/controller.py` mit Fake-Modus, Software-in-the-Loop
   am PC (5.6). Am Pi: venv, Laufzeit der Schleife messen.
+- **Stand 20.11.2026:** `model/imitation.py` (Lehrer-Daten + Behavior Cloning)
+  fertig. Probelauf am Laptop mit dem Trab als Lehrer: 300.000 Paare in 4 min,
+  Nachmachen in 1 min (Fehler 0,0265 → 0,00003). **Nova läuft in der Simulation
+  allein mit dem Netz von Stufe 2**, genau wie der Trab: 95 % Strecke, gleiche
+  Stoßgrenze (17/19 N), randomisiert gleich viele Stürze. Nächstes: dasselbe am
+  PC mit Netz 2 als Lehrer (1 Mio. Paare), dann der PPO-Feinschliff.
 - Abnahme: Das Netz aus Stufe 2 läuft in der Simulation allein mindestens so
   gut wie der klassische Trab. Die ganze Kette läuft am PC gegen MuJoCo und
   am Pi ohne Servos.

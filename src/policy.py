@@ -228,6 +228,14 @@ class FullMode(_Mode):
         return joint_dict(self.angles)
 
 
+def angles_to_full_action(angles) -> np.ndarray:
+    """Gelenkwinkel (Grad, JOINT_ORDER) -> Ausgabe von Stufe 2, die genau dorthin führt (auf -1..1 begrenzt).
+
+    Umkehrung des Ziels in FullMode.act(), z. B. um den Trab als Vorbild in Netz-Ausgaben umzurechnen.
+    """
+    return np.clip((np.asarray(angles, dtype=float) - STAND_ANGLES) / _JOINT_SCALES, -1.0, 1.0)
+
+
 # ---------------------------------------------------------------------------
 # Einstellungen und fertiges Netz
 # ---------------------------------------------------------------------------
