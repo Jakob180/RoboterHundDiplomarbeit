@@ -125,9 +125,16 @@ def test_held_correction_reaches_its_full_size():
     assert m.correction[LEGS.index("RR") * 3 + 1] == pytest.approx(policy.FOOT_SCALE[1])
 
 
-def test_unreachable_foot_falls_back_to_the_trot_for_that_leg_only(monkeypatch):
-    monkeypatch.setattr(policy, "FOOT_SCALE", (500.0, 10.0, 15.0))
-    m = policy.ResidualMode()
+def test_side_correction_can_be_made_wider():
+    m = policy.ResidualMode(foot_scale=(20.0, 40.0, 15.0))
+    for _ in range(60):
+        m.act(leg_action("RR", y=1.0), DT)
+    assert m.correction[LEGS.index("RR") * 3 + 1] == pytest.approx(40.0)
+    assert policy.ResidualMode().foot_scale == policy.FOOT_SCALE
+
+
+def test_unreachable_foot_falls_back_to_the_trot_for_that_leg_only():
+    m = policy.ResidualMode(foot_scale=(500.0, 10.0, 15.0))
     got = m.act(leg_action("RL", x=1.0) + leg_action("FR", y=1.0), DT)
     pose = gait.Trot().update(DT, 0.0)
     assert got["RL"] == pytest.approx(foot_ik("RL", pose.feet["RL"], pose.body))
@@ -233,6 +240,21 @@ def test_settings_describe_everything_the_observation_needs(mode, name):
     assert json.loads(json.dumps(s)) == s
 
 
+def test_settings_keep_the_foot_scale_of_the_network():
+    wide = policy.ResidualMode(foot_scale=(20.0, 40.0, 15.0))
+    assert policy.settings(wide)["scales"]["foot"] == [20.0, 40.0, 15.0]
+
+
+def test_mode_is_rebuilt_from_the_settings_of_a_network():
+    wide = policy.mode_from_settings(policy.settings(policy.ResidualMode(foot_scale=(20.0, 40.0, 15.0))))
+    assert isinstance(wide, policy.ResidualMode) and wide.foot_scale == (20.0, 40.0, 15.0)
+    assert isinstance(policy.mode_from_settings(policy.settings(policy.FullMode())), policy.FullMode)
+
+
+def test_network_with_its_own_foot_scale_is_accepted():
+    policy.check_settings(policy.settings(policy.ResidualMode(foot_scale=(20.0, 40.0, 15.0))))
+
+
 def write_linear_network(path, weights, bias, meta) -> None:
     """Kleines Test-Netz: Aktion = obs · weights + bias, mit .json daneben."""
     import json
@@ -269,3 +291,9 @@ def test_onnx_network_refuses_other_settings(tmp_path):
     write_linear_network(tmp_path / "netz.onnx", np.zeros((34, 12)), np.zeros(12), meta)
     with pytest.raises(ValueError, match="scales.gyro"):
         policy.OnnxNetwork(tmp_path / "netz.onnx")
+
+
+@pytest.mark.parametrize("bad", [(20.0, -10.0, 15.0), (20.0, 40.0), (0.0, 10.0, 15.0)])
+def test_foot_scale_needs_three_positive_values(bad):
+    with pytest.raises(ValueError, match="foot_scale"):
+        policy.ResidualMode(foot_scale=bad)

@@ -36,19 +36,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 import config  # noqa: E402
 import policy  # noqa: E402
 from nova_env import NovaEnv  # noqa: E402
+from policy import FOOT_SCALE  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
-def make_env(mode: str, randomize: bool, push_force: float, seed: int) -> NovaEnv:
+def make_env(mode: str, randomize: bool, push_force: float, seed: int, foot_scale=FOOT_SCALE) -> NovaEnv:
     """Eine Umgebung (steht oben in der Datei, damit Windows sie an Unterprozesse geben kann).
 
-    push_force: stärkster Stoß in N, 0 = keine Stöße.
+    push_force: stärkster Stoß in N, 0 = keine Stöße. foot_scale: Fußkorrektur in mm (Stufe 1).
     """
     if push_force > 0:
-        env = NovaEnv(mode=mode, randomize=randomize, pushes=True, push_force=push_force)
+        env = NovaEnv(mode=mode, randomize=randomize, pushes=True, push_force=push_force, foot_scale=foot_scale)
     else:
-        env = NovaEnv(mode=mode, randomize=randomize, pushes=False)
+        env = NovaEnv(mode=mode, randomize=randomize, pushes=False, foot_scale=foot_scale)
     env.reset(seed=seed)
     return env
 
@@ -87,6 +88,7 @@ def train(
     seed: int = 0,
     out: Path = ROOT,
     vec_cls=SubprocVecEnv,
+    foot_scale=FOOT_SCALE,
 ) -> Path:
     """Ganzen Lehrplan trainieren. Gibt den Pfad zu final.zip zurück."""
     if mode not in config.CURRICULUM:
@@ -104,14 +106,16 @@ def train(
     folder.mkdir(parents=True, exist_ok=True)
     # Einstellungen aus der Zeit des Trainings, gehören später als .json zum Netz
     (folder / "settings.json").write_text(
-        json.dumps(policy.settings(NovaEnv(mode=mode).policy), indent=2) + "\n", encoding="utf-8",
+        json.dumps(policy.settings(NovaEnv(mode=mode, foot_scale=foot_scale).policy), indent=2) + "\n",
+        encoding="utf-8",
     )
 
     model = None
     for i, (name, millions, randomize, push_force) in enumerate(stages):
         steps = int(millions * 1e6 * scale)
         vec = VecMonitor(vec_cls([
-            partial(make_env, mode, randomize, push_force, seed + 1000 * i + k) for k in range(n_envs)
+            partial(make_env, mode, randomize, push_force, seed + 1000 * i + k, tuple(foot_scale))
+            for k in range(n_envs)
         ]))
         if model is None:
             model = PPO(
@@ -154,7 +158,7 @@ def next_steps(final: Path) -> str:
     )
 
 
-def main() -> None:
+def parse_args(argv=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Netz für Nova trainieren (PPO)")
     parser.add_argument("--mode", default="residual", help="residual = Stufe 1 (Stufe 2 kommt in Phase 4)")
     parser.add_argument("--envs", type=int, help="Hunde parallel, Standard: Zahl der CPU-Threads")
@@ -162,8 +166,16 @@ def main() -> None:
     parser.add_argument("--run", help="Name des Laufs, Standard: Modus + Datum")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--quick", action="store_true", help="kurzer Probelauf")
-    args = parser.parse_args()
-    final = train(args.mode, args.run, args.envs, args.scale, args.quick, args.seed)
+    parser.add_argument(
+        "--foot-scale", type=float, nargs=3, default=list(FOOT_SCALE), metavar=("X", "Y", "Z"),
+        help="Stufe 1: größte Fußkorrektur in mm, vorne/seitlich/oben (Standard %(default)s)",
+    )
+    return parser.parse_args(argv)
+
+
+def main() -> None:
+    args = parse_args()
+    final = train(args.mode, args.run, args.envs, args.scale, args.quick, args.seed, foot_scale=args.foot_scale)
     print(next_steps(final))
 
 

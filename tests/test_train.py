@@ -69,3 +69,19 @@ def test_last_curriculum_stage_pushes_up_to_25_newton():
     name, millions, randomize, push_force = config.CURRICULUM["residual"][-1]
     assert randomize and push_force == 25.0
     assert config.CURRICULUM["residual"][0][3] == 0.0  # erster Abschnitt ohne Stöße
+
+
+def test_make_env_passes_the_foot_scale():
+    env = train.make_env("residual", False, 0.0, 0, foot_scale=(20.0, 40.0, 15.0))
+    assert env.policy.foot_scale == (20.0, 40.0, 15.0)
+
+
+def test_foot_scale_is_an_option_of_the_command_line():
+    assert train.parse_args([]).foot_scale == list(train.FOOT_SCALE)
+    assert train.parse_args(["--foot-scale", "20", "40", "15"]).foot_scale == [20.0, 40.0, 15.0]
+
+
+def test_settings_json_records_the_trained_foot_scale(tmp_path):
+    train.train(quick=True, run="breit", out=tmp_path, vec_cls=DummyVecEnv, foot_scale=(20.0, 40.0, 15.0))
+    meta = json.loads((tmp_path / "checkpoints" / "breit" / "settings.json").read_text(encoding="utf-8"))
+    assert meta["scales"]["foot"] == [20.0, 40.0, 15.0]

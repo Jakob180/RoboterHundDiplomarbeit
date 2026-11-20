@@ -56,7 +56,9 @@ OBS_CLIP = 5.0                    # größter Betrag eines Eingangs
 SPEED_RAMP = 200.0                # mm/s pro s
 YAW_RAMP = 60.0                   # °/s pro s
 
-# Stufe 1: Korrektur je Fuß bei Ausgabe ±1, in mm (x vorne, y links, z oben)
+# Stufe 1: Korrektur je Fuß bei Ausgabe ±1, in mm (x vorne, y links, z oben).
+# Standard; ein Netz kann mit einem anderen Wert trainiert sein (steht in seiner .json).
+# Seitlich gehen in der Simulation bis ±40 mm (darüber kippt Nova, wenn alle Füße auf einmal gehen).
 FOOT_SCALE = (20.0, 10.0, 15.0)
 SMOOTHING = 0.2                   # Anteil der vorigen Korrektur (leicht geglättet)
 
@@ -151,6 +153,12 @@ class ResidualMode(_Mode):
 
     name = "residual"
 
+    def __init__(self, foot_scale=FOOT_SCALE, **trot) -> None:
+        self.foot_scale = tuple(float(v) for v in foot_scale)  # mm bei Ausgabe ±1 (x, y, z)
+        if len(self.foot_scale) != 3 or not all(v > 0 for v in self.foot_scale):
+            raise ValueError(f"foot_scale braucht 3 positive Werte (mm), nicht {foot_scale!r}")
+        super().__init__(**trot)
+
     def reset(self) -> None:
         super().reset()
         self.correction = np.zeros(N_ACTIONS)  # mm je Fuß (x, y, z), geglättet
@@ -166,7 +174,7 @@ class ResidualMode(_Mode):
         a = self._clean(action)
         self._ramp(dt)
         pose = self.trot.update(dt, self.speed, self.yaw_rate)
-        self.correction = (1 - SMOOTHING) * a * np.tile(FOOT_SCALE, len(LEGS)) + SMOOTHING * self.correction
+        self.correction = (1 - SMOOTHING) * a * np.tile(self.foot_scale, len(LEGS)) + SMOOTHING * self.correction
 
         angles = {}
         for i, leg in enumerate(LEGS):
@@ -242,7 +250,7 @@ def settings(mode: _Mode) -> dict:
             "obs_clip": OBS_CLIP,
             "speed_ramp": SPEED_RAMP,
             "yaw_ramp": YAW_RAMP,
-            "foot": list(FOOT_SCALE),
+            "foot": list(getattr(mode, "foot_scale", FOOT_SCALE)),
             "smoothing": SMOOTHING,
             "joint": dict(JOINT_SCALE),
             "max_joint_speed": MAX_JOINT_SPEED,
@@ -258,10 +266,23 @@ def _differences(expected, found, prefix: str = "") -> list[str]:
     return [] if expected == found else [prefix.rstrip(".")]
 
 
+def mode_from_settings(found: dict) -> _Mode:
+    """Die Stufe so bauen, wie das Netz trainiert wurde (Fußkorrektur aus seiner .json)."""
+    if found.get("mode") == "full":
+        return FullMode()
+    foot = found.get("scales", {}).get("foot")
+    if isinstance(foot, list) and len(foot) == 3:
+        return ResidualMode(foot_scale=foot)
+    return ResidualMode()
+
+
 def check_settings(found: dict, name: str = "Netz", mode: _Mode | None = None) -> None:
-    """ValueError, wenn ein Netz mit anderen Einstellungen trainiert wurde, als diese policy.py hat."""
+    """ValueError, wenn ein Netz mit anderen Einstellungen trainiert wurde, als diese policy.py hat.
+
+    Die Fußkorrektur darf je Netz anders sein, mode_from_settings() übernimmt sie.
+    """
     if mode is None:
-        mode = {"residual": ResidualMode, "full": FullMode}.get(found.get("mode"), ResidualMode)()
+        mode = mode_from_settings(found)
     wrong = _differences(settings(mode), found)
     if wrong:
         raise ValueError(f"{name} wurde mit anderen Einstellungen trainiert als in policy.py: {', '.join(wrong)}")

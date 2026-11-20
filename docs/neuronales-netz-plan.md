@@ -283,6 +283,19 @@ der folgende Plan ab, ohne dass alles an einem riskanten Schritt hängt:
 | **Soll** | **Stufe 2** (Netz läuft selbst) in der Simulation; Stufe 1 und 2 am echten Hund, Vergleich klassisch / Stufe 1 / Stufe 2 |
 | **Kann** | Drehen auf Befehl, Hindernisvermeidung mit Ultraschall (Regeln, dann Netz), unebener Boden |
 
+**Entscheidung des Betreuers (20.11.2026):**
+
+- **Stufe 2 ist Pflicht**, nicht nur Soll. Muss also: Stufe 1 und Stufe 2.
+- **Am echten Hund muss das Netz besser laufen als der klassische Trab**, nicht
+  nur in der Simulation. Damit werden die Servo-Messungen (5.1) und das
+  Nachschärfen mit echten Logs (Phase 5) noch wichtiger.
+- **Neu als Pflicht: Sicherheits-Erkennung.** Nova soll erkennen, welcher Motor
+  zu wenig Strom bekommt, und sich bei einem Kurzschluss (oder zu viel Strom)
+  abschalten. Siehe Hardware-Tabelle in 4.4.
+- Abnahme Phase 3 neu (siehe dort): Stoßgrenze statt „20 N überstanden“,
+  Strecke und Kurs statt „halb so oft umgefallen“. Zusätzlich ein Training mit
+  ±40 mm seitlicher Fußkorrektur (statt ±10 mm).
+
 Begründung:
 
 - **Beide Stufen nutzen denselben Unterbau** (Simulation, Umgebung,
@@ -509,6 +522,7 @@ Netz. Die beiden Sensoren abwechselnd auslösen, sonst stören sie sich.
 | Akkuspannung (INA226 oder ADS1115) | LiPo nicht tiefentladen (unter 3,3 V pro Zelle = 6,6 V), Spannung für die Auswertung | empfohlen | INA226 misst auch den Strom (Energie pro Meter für die Arbeit). **INA226 auf Adresse 0x41 stellen**, 0x40 hat schon der PCA9685. ADS1115 hat 0x48. |
 | Gelenkwinkel-Rückmeldung | echte Winkel für das Netz | nein | Ginge nur mit Umbau (Draht am Servo-Potentiometer + ADC). Fürs Netz nicht nötig. Für die Servo-Messung reicht es, **einen** Test-Servo so umzubauen. |
 | Fußkontakt-Sensoren | – | nein | Bei festen Gummifüßen unnötig. |
+| **Strom je Motor (Sicherheits-Erkennung)** | erkennen, welcher Motor zu wenig oder zu viel Strom bekommt; abschalten | **ja** (Betreuer, 20.11.2026) | **Kurzschluss fängt nur die Sicherung ab**, die Software ist dafür zu langsam. Die Software erkennt Überstrom (Motor blockiert), fehlenden Strom (Kabel lose, Servo kaputt) und schaltet über OE-Pin und Not-Aus-Schalter ab. Variante 1: ein Stromsensor für alle (INA226) + Selbsttest beim Einschalten (jeder Motor einzeln, der Strom muss steigen). Variante 2: Strom je Servo (12 Kanäle, eigene Verteilerplatine), erkennt es auch beim Laufen. Vergleichbare 25-kg-Servos ziehen blockiert ca. 2,5 bis 3,5 A bei 7,4 V, für die MS62 selbst messen. |
 
 ---
 
@@ -666,8 +680,8 @@ Arbeit nebenbei mitschreiben: Jede Phase liefert ein Kapitel.
 | 22.3. bis Abgabe | 12 bis 14 | **Phase 7:** Puffer, Auswertung, Arbeit fertigschreiben | |
 
 **Kritischer Pfad:** Der Hund muss bis Ende Jänner stehen. Wird er später
-fertig, fällt zuerst Stufe 2 am echten Hund weg (sie bleibt dann ein
-Simulationsergebnis), dann die Kann-Ziele.
+fertig, fallen zuerst die Kann-Ziele weg. Stufe 2 am echten Hund ist seit
+20.11.2026 Pflicht (Betreuer) und fällt nicht mehr weg.
 
 ### Die Phasen im Detail
 
@@ -722,6 +736,15 @@ Jede Phase endet mit etwas Prüfbarem.
 - Abnahme (Vorschlag): Mit Randomisierung übersteht das Netz deutlich mehr
   Episoden als der Trab, fällt bei einem 15-N-Stoß nicht um, und die Drehung
   bei ±3° Kalibrierfehler sinkt mindestens auf die Hälfte.
+- **Abnahme neu (mit dem Betreuer am 20.11.2026 vereinbart)**, prüft
+  `model/evaluate.py --policy`:
+  1. Randomisiert mit Stößen (20 gleiche Hunde): mindestens 90 % der
+     befohlenen Strecke und nicht öfter umgefallen als der Trab.
+  2. Randomisiert mit Stößen: höchstens halb so stark abgedreht wie der Trab.
+  3. Stoßgrenze (stärkster Seitenstoß von 0,2 s, in 1-N-Schritten, bis zu dem
+     Nova nicht umfällt) nach links und nach rechts mindestens ein Viertel
+     höher als beim Trab. Der Trab hält 17 N nach links und 19 N nach rechts.
+  4. Kalibrierfehler ±3°: höchstens halb so stark abgedreht (wie bisher).
 
 - **Stand 18.11.2026: Code fertig** (lokal), Training am PC offen. `model/train.py`
   (Lehrplan 2 / 6 / 7 Mio. Schritte), `model/export_onnx.py` (Gegenprobe mit
@@ -742,6 +765,20 @@ Jede Phase endet mit etwas Prüfbarem.
   Randomisierung kaum fällt (1 von 20). Deshalb im Lehrplan Abschnitt 3 jetzt
   Stöße bis 25 N. Das Sturz-Kriterium mit dem Betreuer klären (Vorschlag:
   „übersteht 20-N-Stöße aus zufälliger Richtung“).
+- **2. Training (19.11.2026, Stöße bis 25 N):** Strecke 81 % → 96 %, Drift
+  426 → 190 mm, Verdrehung 39,6° → 16,7°, Neigung 7,5° → 6,4°, Stürze 1 → 1.
+  Kalibrierfehler ±3°: 51° → 16,2°. 20 N und 25 N: fällt weiter (nach 5,9 s).
+  Grund: Ein 20-N-Stoß von 0,2 s gibt Nova 1,5 m/s und verschiebt den Punkt,
+  auf den ein Fuß müsste, um ca. 20 cm. Die Füße stehen bei ±94 mm, das Netz
+  darf sie aber nur ±10 mm verschieben. Mit Stufe 1 so nicht abzufangen.
+- **Stand 20.11.2026:** Abnahme neu (siehe oben). Die Fußkorrektur ist jetzt je
+  Netz einstellbar (`train.py --foot-scale 20 40 15`, steht in der `.json`, alte
+  Netze laufen weiter mit ±10 mm). Reichweite in der Simulation geprüft: Alle
+  Füße gleichzeitig ±40 mm verschoben läuft ohne Gelenkgrenze, ohne
+  Ausweichen der IK und ohne dass Beine aneinanderstoßen; ±60 mm auf einmal
+  kippt Nova um. Mit dem Anfangs-Zufall des Trainings läuft der Trab mit
+  ±40 mm 65 % statt 80 % der Strecke, fällt aber nicht. Nächster Schritt:
+  3. Training mit ±40 mm, Netz 2 und 3 mit der neuen Abnahme vergleichen.
 
 **Phase 4: Stufe 2 und Pi-Software**
 - `model/imitation.py`: Daten mit dem Lehrer sammeln, Behavior Cloning.
@@ -759,6 +796,9 @@ Jede Phase endet mit etwas Prüfbarem.
 - Reihenfolge aus 5.5. Logs vergleichen, Modell anpassen, neu trainieren.
 - Abnahme: Stufe 1 am echten Hund, gemessen gegen den Trab ohne Netz; Stufe 2
   zumindest aufgebockt und kurze Strecken am Boden.
+- **Neu (Betreuer, 20.11.2026):** Stufe 2 ist Pflicht, und das Netz muss am
+  echten Hund besser laufen als der Trab ohne Netz. Die Sicherheits-Erkennung
+  (Strom je Motor, Abschalten) muss vor den ersten Versuchen am Boden laufen.
 
 **Phase 6: Kann-Ziele**
 - Drehen auf Befehl, `src/obstacle.py` mit Regeln, optional Netz
@@ -824,7 +864,7 @@ den Anfang nicht nötig.
 | MPU6050-Klon antwortet anders | Bibliothek verweigert den Dienst | `WHO_AM_I` prüfen, sonst `smbus2` direkt |
 | Sim-Werte stimmen nicht | Netz funktioniert nur in der Sim | Messungen (5.1), breite Randomisierung, Logs vergleichen |
 | Verzögerung am Pi größer als gedacht | Netz schaukelt sich auf | Totzeit messen, im Training abdecken, Netz-Anteil `k` |
-| Stufe 2 überträgt sich nicht auf den echten Hund | Soll-Ziel nur in der Simulation | Stufe 1 als Muss-Ziel, Trab als Rückfallebene |
+| Stufe 2 überträgt sich nicht auf den echten Hund | Pflicht-Ziel verfehlt (seit 20.11.2026 Muss) | Servos früh messen, echte Massen eintragen, breit randomisieren, zuerst aufgebockt, mit Logs nachtrainieren; Stufe 1 und Trab als Rückfallebene |
 | Training lernt nichts | Zeitverlust | erst ohne Randomisierung, Belohnung einzeln prüfen, kleine Startausschläge, mehrere PCs parallel |
 | Unterschiedliche Beobachtung in Sim und Pi | Netz macht am Pi Unsinn | gemeinsames `policy.py` und `imu.py`, Test mit aufgezeichneten Daten |
 
@@ -835,8 +875,8 @@ den Anfang nicht nötig.
 Geklärt: Abgabe ca. April 2027, Servos (Datenblatt oben), IMU MPU6050,
 Training auf deinem PC (CPU).
 
-1. **Betreuer:** Reicht "Netz verbessert den Trab" als Muss-Ziel, wenn "Netz
-   läuft selbst" das Soll-Ziel ist? (Vorschlag für die Frage in 3.2)
+1. ~~**Betreuer:** Reicht "Netz verbessert den Trab" als Muss-Ziel?~~
+   Geklärt am 20.11.2026: Nein, Stufe 2 ist auch Pflicht (siehe 3.2).
 2. **Dein PC:** Welche CPU (wie viele Kerne)? Davon hängt die Trainingsdauer ab.
 3. **Hardware-Zeitplan:** Sind die Servos schon da (4 × 3er-Pack)? Wer druckt,
    und ist Ende Jänner für den fertigen Hund realistisch?

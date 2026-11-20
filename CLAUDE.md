@@ -56,11 +56,12 @@ Zwei getrennte Ordner, damit schnelle Tests nie mit Git kollidieren:
 - Schnell testen: Laptop -> `scp -r src <pi>:~/nova-test/` -> am Pi `~/nova/.venv/bin/python src/...` in `~/nova-test` starten.
 - Fertig: am Laptop `git push`, am Pi in `~/nova` `git pull`.
 - Am Pi ohne `NOVA_SIM` starten, dann bewegen sich die echten Servos.
-- Eingerichtet seit 15.11.2026 (`~/nova` mit venv, `~/nova-test`, I2C an). Der Pi ist noch nicht im Hund, PCA9685 und GY-521 sind noch nicht angeschlossen.
+- Eingerichtet seit 15.11.2026 (`~/nova` mit venv, `~/nova-test`, I2C an). Der Pi ist noch nicht im Hund. Der PCA9685 hängt am Pi (Adresse 0x40), der erste Servo hat sich am 19.11.2026 bewegt. Der GY-521 ist noch nicht angeschlossen (Ersatz mit fertig gelöteten Pins kommt Mitte Dezember).
 
 ## Aktueller Stand (Nov. 2026)
 
-- Servos sind noch nicht gekauft, der Hund ist noch nicht 3D-gedruckt.
+- Teile sind da (15 Servos Miuzei MS62, PCA9685, 2S-LiPo 5200 mAh, Ladegerät), der 3D-Druck läuft.
+- **Betreuer, 20.11.2026:** Stufe 2 ist Pflicht (nicht nur Soll). Am echten Hund muss das Netz besser laufen als der Trab. Neu als Pflicht: Sicherheits-Erkennung (welcher Motor zu wenig/zu viel Strom bekommt, Abschalten bei Kurzschluss). Abnahme Phase 3 neu, siehe `evaluate.py`. Details in `docs/neuronales-netz-plan.md` (3.2, 4.4, Phase 3).
 - `src/servos.py`: Servo-Schicht über PCA9685 (`adafruit-circuitpython-servokit`, I2C) mit Simulationsmodus.
   - Alle Bewegungen laufen über `Servos.set_joint()` / `Servos.set_all()`, dort wird auf die Gelenkgrenzen begrenzt; NaN/None -> Grundstellung.
   - Gelenknamen: `FL/FR/RL/RR` + `_shoulder/_upper/_lower`; `JOINT_ORDER` ist die Reihenfolge der 12 Netz-Ausgaben.
@@ -98,17 +99,18 @@ Zwei getrennte Ordner, damit schnelle Tests nie mit Git kollidieren:
 - `model/evaluate.py`: Kennzahlen des klassischen Trabs in festen Szenarien und unter Randomisierung (feste Zufallszahlen). Ausgangswerte in `model/results/trab-phase1.json`, dauert am Laptop ca. 50 s.
   - Wichtigste Ergebnisse: Kalibrierfehler ±3° -> 41° Drehung, 2° Spiel -> nur 63 % Strecke, Stoß 15 N wird überstanden, ab 20 N fällt Nova um. Randomisiert im Mittel 73 % Strecke, 190 mm Drift, 29° Drehung.
 - `src/policy.py`: Schnittstelle zum Netz, gleicher Code in der Trainingsumgebung und später am Pi. `mode.observe(oben, drehrate)` baut die 34 Eingänge, `mode.act(ausgabe, dt)` macht aus den 12 Ausgaben begrenzte Gelenkwinkel. NaN -> 0, alles auf -1..1 und auf die Gelenkgrenzen begrenzt. Noch nicht auf der Hardware getestet.
-  - `ResidualMode` (Stufe 1): Trab + Korrektur der Fußpunkte (±20/±10/±15 mm). Ausgabe 0 = genau der klassische Trab.
+  - `ResidualMode` (Stufe 1): Trab + Korrektur der Fußpunkte (Standard ±20/±10/±15 mm, je Netz einstellbar mit `ResidualMode(foot_scale=...)`, seitlich gehen bis ±40 mm). Ausgabe 0 = genau der klassische Trab.
   - `FullMode` (Stufe 2): Netz gibt die Gelenkwinkel vor (±30°, Schulter ±15°, höchstens 400 °/s), Trab läuft als Taktgeber und Vorbild (`reference`) mit.
   - Befehl mit `set_command(tempo, drehrate)`, wird weich angefahren.
-  - `OnnxNetwork(pfad)` führt ein fertiges Netz aus (braucht nur onnxruntime). `settings(mode)` beschreibt alle Skalierungen; beim Training als `settings.json` gespeichert, beim Export als `.json` neben das Netz. `check_settings()` verweigert Netze, die mit anderen Einstellungen trainiert wurden.
+  - `OnnxNetwork(pfad)` führt ein fertiges Netz aus (braucht nur onnxruntime). `settings(mode)` beschreibt alle Skalierungen; beim Training als `settings.json` gespeichert, beim Export als `.json` neben das Netz. `check_settings()` verweigert Netze, die mit anderen Einstellungen trainiert wurden (außer der Fußkorrektur: `mode_from_settings()` baut die Stufe so, wie das Netz trainiert wurde).
 - `model/config.py`: Zahlen der Trainingsumgebung (Episode 10 s, Befehle, Abbruch, Gewichte der Belohnung je Stufe).
 - `model/nova_env.py`: Trainingsumgebung im Gymnasium-Format (`NovaEnv(mode="residual"|"full", randomize, pushes, max_yaw_rate)`). Würfelt bei jedem `reset()` einen neuen Hund, Belohnung nach Plan-Tabelle 4.1 plus Term „kurs“ (Abweichung vom befohlenen Kurs, Breite 10°, weil langsames Abdriften sonst kaum kostet), Abbruch beim Umfallen.
   - Ca. 630 Schritte/s am Laptop. Korrektur 0 läuft nominal ohne Umfallen durch (87 % der befohlenen Strecke), ein zufälliges Netz fällt meist um.
   - Feste Szenarien für Vergleiche: `env.reset(seed=0, options={"randomization": r, "command": (150.0, 0.0)})`. Am Episodenende steht in `info["nova"]` die gelaufene Strecke und ob Nova umgefallen ist.
-- `model/train.py`: PPO-Training (Stable-Baselines3) nach Lehrplan aus `config.CURRICULUM`: ohne Zufall (2 Mio.), randomisiert (6 Mio.), mit Stößen bis 25 N (7 Mio. Schritte). Am PC (Ryzen 5 5600X, 12 Hunde) ca. 3.000 Schritte/s, also ca. 1,5 h. So viele Hunde parallel wie CPU-Threads. Anfangs-Zufall `LOG_STD_INIT` -2,0 statt -1,0 aus dem Plan (mit -1,0 läuft der Trab beim Ausprobieren nur 12 % der Strecke). Zwischenstände in `checkpoints/<lauf>/`, Lernkurven inkl. aller Belohnungs-Terme in `runs/`. Stufe 2 kommt in Phase 4.
+- `model/train.py`: PPO-Training (Stable-Baselines3) nach Lehrplan aus `config.CURRICULUM`: ohne Zufall (2 Mio.), randomisiert (6 Mio.), mit Stößen bis 25 N (7 Mio. Schritte). Am PC (Ryzen 5 5600X, 12 Hunde) ca. 3.000 Schritte/s, also ca. 1,5 h. So viele Hunde parallel wie CPU-Threads. Anfangs-Zufall `LOG_STD_INIT` -2,0 statt -1,0 aus dem Plan (mit -1,0 läuft der Trab beim Ausprobieren nur 12 % der Strecke). Zwischenstände in `checkpoints/<lauf>/`, Lernkurven inkl. aller Belohnungs-Terme in `runs/`. `--foot-scale 20 40 15` trainiert mit ±40 mm seitlicher Fußkorrektur (steht dann in `settings.json`). Stufe 2 kommt in Phase 4.
 - `model/export_onnx.py`: `final.zip` -> `model/policies/<name>.onnx` + `.json`, vergleicht danach Original und ONNX (braucht onnxruntime, gibt es für Python 3.15 unter Windows noch nicht -> am Laptop machen).
-- `model/evaluate.py --policy <.zip|.onnx>`: Trab ohne Netz gegen Trab mit Netz auf denselben Hunden (Szenarien + 20 randomisierte Episoden mit Stößen, 150 mm/s), hakt die Abnahme-Kriterien aus Phase 3 ab.
+- `model/evaluate.py --policy <.zip|.onnx>`: Trab ohne Netz gegen Trab mit Netz auf denselben Hunden (Szenarien + 20 randomisierte Episoden mit Stößen, 150 mm/s) und Stoßgrenze nach links/rechts (`push_limit()`, stärkster Seitenstoß in 1-N-Schritten ohne Umfallen; Trab: 17 N links, 19 N rechts). Hakt die Abnahme ab (mit dem Betreuer am 20.11.2026 vereinbart): Strecke ≥ 90 % und nicht öfter umgefallen, Kurs halb so stark abgedreht, Stoßgrenze beidseitig ≥ 1,25 × Trab, Kalibrierfehler halb so stark abgedreht.
+  - Ergebnisse 19.11.2026: Netz 2 (Stöße bis 25 N, ±10 mm) läuft 96 % statt 81 % der Strecke, dreht 17° statt 40° ab, Kalibrierfehler 16° statt 51°. Den 20-N-Stoß übersteht es nicht (mit ±10 mm physikalisch nicht machbar), daher das Training mit ±40 mm.
 - `tests/`: pytest für alle Module (ohne Hardware).
 
 ## Nächste Schritte
@@ -116,4 +118,5 @@ Zwei getrennte Ordner, damit schnelle Tests nie mit Git kollidieren:
 1. Inverse Kinematik für ein Bein: erledigt (`src/kinematics.py`). Offen: Beinlängen aus den STL-Dateien des Thingiverse-Modells abmessen.
 2. Grundposen und Gang: erledigt (`src/gait.py`), mit Drehen. Kalibrierung Kinematik-Winkel -> Servo-Winkel steht in `servos.py` (Platzhalter-Nullpunkte). Offen: Nullpunkte und Grenzen am echten Hund ausmessen.
 3. Simulation: Phase 1 aus `docs/neuronales-netz-plan.md` erledigt (Servo-Modell, IMU, Randomisierung, Auswertung). MuJoCo statt PyBullet, weil es PyBullet für Windows nicht als fertiges Paket gibt. Offen: echte Massen, Schwerpunkt und Servo-Messungen (Kp, Totzeit) eintragen.
-4. Neuronales Netz per Reinforcement Learning in der Simulation am PC trainieren, als ONNX auf den Pi bringen. Der klassische Gang bleibt als Rückfallebene. Phase 2 (Trainingsumgebung) ist erledigt, der Code für Phase 3 (Training, Export, Vergleich) steht. Nächster Schritt: das echte Training von Stufe 1 am PC laufen lassen und mit `evaluate.py --policy` gegen den Trab prüfen.
+4. Neuronales Netz per Reinforcement Learning in der Simulation am PC trainieren, als ONNX auf den Pi bringen. Der klassische Gang bleibt als Rückfallebene. Phase 2 (Trainingsumgebung) ist erledigt, Phase 3 läuft: zwei Trainings am PC fertig (Netz 2 erfüllt 3 von 4 Kriterien der neuen Abnahme, Stoßgrenze noch nicht gemessen). Nächster Schritt: 3. Training mit `--foot-scale 20 40 15`, dann Netz 2 und 3 mit `evaluate.py --policy` vergleichen und das bessere als ONNX exportieren (am Laptop, wegen onnxruntime).
+5. Sicherheits-Erkennung (Betreuer): Sicherung gegen Kurzschluss, Not-Aus, Strommessung (Variante 1: ein INA226 + Selbsttest je Motor; Variante 2: Strom je Servo). Hardware-Variante noch offen, Software kommt mit `src/controller.py` (Phase 4) und wird gegen die Simulation getestet.

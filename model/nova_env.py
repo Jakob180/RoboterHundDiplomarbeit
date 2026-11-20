@@ -36,7 +36,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 import config  # noqa: E402
 from gait import STAND  # noqa: E402
 from imu import ComplementaryFilter  # noqa: E402
-from policy import N_ACTIONS, OBS_CLIP, STAND_ANGLES, FullMode, ResidualMode, joint_dict  # noqa: E402
+from policy import FOOT_SCALE, N_ACTIONS, OBS_CLIP, STAND_ANGLES, FullMode, ResidualMode, joint_dict  # noqa: E402
 from randomization import PUSH_FORCE, Randomization, apply, imu_reading, sample, sample_pushes  # noqa: E402
 from sim import CONTROL_HZ, NovaSim  # noqa: E402
 
@@ -59,6 +59,7 @@ class NovaEnv(gym.Env):
         max_yaw_rate: float = config.COMMAND_YAW_RATE,
         episode_seconds: float = config.EPISODE_SECONDS,
         push_force: float = PUSH_FORCE[1],
+        foot_scale=FOOT_SCALE,
     ) -> None:
         if mode not in config.REWARD:
             raise ValueError(f"mode muss 'residual' oder 'full' sein, nicht {mode!r}")
@@ -69,7 +70,7 @@ class NovaEnv(gym.Env):
         self.max_yaw_rate = max_yaw_rate
         self.episode_steps = round(episode_seconds * CONTROL_HZ)
         self.weights = config.REWARD[mode]
-        self.policy = ResidualMode() if mode == "residual" else FullMode()
+        self.policy = ResidualMode(foot_scale) if mode == "residual" else FullMode()
         self.observation_space = spaces.Box(-OBS_CLIP, OBS_CLIP, (self.policy.n_obs,), np.float32)
         self.action_space = spaces.Box(-1.0, 1.0, (N_ACTIONS,), np.float32)
         self.sim: NovaSim | None = None

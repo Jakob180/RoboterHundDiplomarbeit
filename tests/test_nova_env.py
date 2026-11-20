@@ -234,3 +234,7 @@ def test_push_strength_reaches_the_randomization():
         env.reset(seed=seed)
         forces += [math.hypot(p.force[0], p.force[1]) for p in env.randomization.pushes]
     assert max(forces) <= 25.0 and max(forces) > 15.0
+
+
+def test_foot_scale_reaches_the_policy():
+    assert NovaEnv(foot_scale=(20.0, 40.0, 15.0)).policy.foot_scale == (20.0, 40.0, 15.0)

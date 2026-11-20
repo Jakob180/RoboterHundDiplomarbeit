@@ -19,7 +19,9 @@ Stößen und Zufallszahlen, 10-s-Episoden mit 150 mm/s geradeaus:
     python model/evaluate.py --policy checkpoints/<lauf>/final.zip
     python model/evaluate.py --policy model/policies/nova_residual_v1.onnx
 
-Am Ende stehen die Abnahme-Kriterien aus dem Plan (Phase 3).
+Dazu die Stoßgrenze: der stärkste Seitenstoß (in 1-N-Schritten), bis zu dem
+Nova nach links und nach rechts nicht umfällt. Am Ende stehen die
+Abnahme-Kriterien (Phase 3, mit dem Betreuer am 20.11.2026 vereinbart).
 """
 
 from __future__ import annotations
@@ -40,7 +42,7 @@ from imu import ComplementaryFilter  # noqa: E402
 import config  # noqa: E402
 from kinematics import LEGS  # noqa: E402
 from nova_env import NovaEnv  # noqa: E402
-from policy import N_ACTIONS, OnnxNetwork, check_settings  # noqa: E402
+from policy import FOOT_SCALE, N_ACTIONS, OnnxNetwork, check_settings  # noqa: E402
 from randomization import Push, Randomization, apply, sample  # noqa: E402
 from sim import CONTROL_HZ, NovaSim, ServoParams  # noqa: E402
 
@@ -160,8 +162,15 @@ SCENARIOS: dict[str, Randomization] = {
 COMMAND = (150.0, 0.0)  # mm/s und °/s, wie im Ablauf aus Phase 1
 ENV_PUSH_TIME = 5.5     # s ab Start der Simulation (nach 0,5 s Stehen), mitten im Lauf
 
-ACCEPT_FALLS = "Randomisiert mit Stößen: höchstens halb so oft umgefallen"
-ACCEPT_PUSH = "Seitenstoß 20 N überstanden"
+PUSH_MAX = 40.0         # N, stärkster Stoß bei der Suche nach der Stoßgrenze
+PUSH_DIRECTIONS = {"links": +1, "rechts": -1}  # Richtung, in die der Stoß schiebt
+
+# Abnahme Phase 3 (mit dem Betreuer am 20.11.2026 vereinbart)
+MIN_DISTANCE = 0.9      # Anteil der befohlenen Strecke
+PUSH_GAIN = 1.25        # Stoßgrenze mindestens ein Viertel über der des Trabs
+ACCEPT_DISTANCE = "Randomisiert mit Stößen: mindestens 90 % der Strecke, nicht öfter umgefallen"
+ACCEPT_COURSE = "Randomisiert mit Stößen: höchstens halb so stark abgedreht"
+ACCEPT_PUSH = "Stoßgrenze links und rechts mindestens ein Viertel höher als beim Trab"
 ACCEPT_CALIBRATION = "Kalibrierfehler ±3°: höchstens halb so stark abgedreht"
 
 Network = Callable[[np.ndarray], np.ndarray]
@@ -192,9 +201,13 @@ POLICY_SCENARIOS: dict[str, Randomization] = {
 
 def run_policy_episode(
     r: Randomization, network: Network | None = None, mode: str = "residual", command=COMMAND,
+    foot_scale=FOOT_SCALE,
 ) -> PolicyResult:
-    """Eine Episode in der Trainingsumgebung. network=None: Trab ohne Netz."""
-    env = NovaEnv(mode=mode if network is not None else "residual")
+    """Eine Episode in der Trainingsumgebung. network=None: Trab ohne Netz.
+
+    foot_scale: Fußkorrektur, mit der das Netz trainiert wurde (Stufe 1).
+    """
+    env = NovaEnv(mode=mode if network is not None else "residual", foot_scale=foot_scale)
     obs, _ = env.reset(seed=0, options={"randomization": r, "command": command})
     tilt = 0.0
     while True:
@@ -206,6 +219,26 @@ def run_policy_episode(
             return PolicyResult(round(env.sim.data.time, 3), None, None, None, tilt)
         if truncated:
             return PolicyResult(None, env.walked / env.commanded, state.y, state.yaw, tilt)
+
+
+def push_limit(
+    network: Network | None = None, mode: str = "residual", foot_scale=FOOT_SCALE,
+    direction: int = +1, step: float = 1.0, max_force: float = PUSH_MAX,
+) -> float:
+    """Stärkster Seitenstoß in N, bei dem Nova nicht umfällt und alle schwächeren auch nicht.
+
+    Sucht in Schritten von `step` N (step, 2·step, ...) bis max_force. direction +1 schiebt
+    nach links, -1 nach rechts. 0 = schon der schwächste Stoß wirft Nova um.
+    """
+    survived = 0.0
+    force = step
+    while force <= max_force + 1e-9:
+        r = Randomization(pushes=[Push(ENV_PUSH_TIME, (0.0, direction * force, 0.0), 0.2)])
+        if run_policy_episode(r, network, mode, foot_scale=foot_scale).fallen_at is not None:
+            break
+        survived = force
+        force += step
+    return survived
 
 
 def _summary(results: list[PolicyResult]) -> dict[str, float | int | None]:
@@ -226,28 +259,44 @@ def _summary(results: list[PolicyResult]) -> dict[str, float | int | None]:
 
 def compare(
     network: Network, mode: str = "residual", episodes: int = 20, seed: int = 0,
-    scenarios: dict[str, Randomization] = POLICY_SCENARIOS,
+    scenarios: dict[str, Randomization] = POLICY_SCENARIOS, foot_scale=FOOT_SCALE,
+    push_step: float = 1.0, push_max: float = PUSH_MAX,
 ) -> dict:
-    """Trab und Netz in denselben Szenarien und auf denselben zufälligen Hunden (mit Stößen)."""
-    out: dict = {"Szenarien": {}, "Randomisiert": {}}
+    """Trab und Netz in denselben Szenarien, auf denselben zufälligen Hunden (mit Stößen)
+    und bei der Stoßgrenze nach links und rechts."""
+    out: dict = {"Szenarien": {}, "Randomisiert": {}, "Stoßgrenze": {}}
     for name, r in scenarios.items():
         out["Szenarien"][name] = {
             "Trab": run_policy_episode(r)._asdict(),
-            "Netz": run_policy_episode(r, network, mode)._asdict(),
+            "Netz": run_policy_episode(r, network, mode, foot_scale=foot_scale)._asdict(),
         }
     duration = config.EPISODE_SECONDS + config.WARMUP_SECONDS
     dogs = [sample(np.random.default_rng((seed, i)), True, duration) for i in range(episodes)]
     out["Randomisiert"]["Trab"] = _summary([run_policy_episode(r) for r in dogs])
-    out["Randomisiert"]["Netz"] = _summary([run_policy_episode(r, network, mode) for r in dogs])
+    out["Randomisiert"]["Netz"] = _summary([run_policy_episode(r, network, mode, foot_scale=foot_scale) for r in dogs])
+    for who, net in (("Trab", None), ("Netz", network)):
+        out["Stoßgrenze"][who] = {
+            side: push_limit(net, mode, foot_scale, sign, push_step, push_max) for side, sign in PUSH_DIRECTIONS.items()
+        }
     return out
 
 
 def acceptance(out: dict) -> dict[str, bool]:
-    """Abnahme-Kriterien aus dem Plan (Phase 3), mit 20 N statt 15 N (15 N schafft schon der Trab)."""
-    trab, netz = out["Randomisiert"]["Trab"]["umgefallen"], out["Randomisiert"]["Netz"]["umgefallen"]
-    falls = netz <= trab / 2 if trab > 0 else netz == 0
-    push = out["Szenarien"].get("Seitenstoß 20 N")
-    pushed = push is not None and push["Netz"]["fallen_at"] is None
+    """Abnahme-Kriterien Phase 3, mit dem Betreuer am 20.11.2026 vereinbart.
+
+    Statt "halb so oft umgefallen" (der Trab fällt randomisiert kaum, 1 von 20) zählen
+    Strecke und Kurs. Statt "20 N überstanden" (mit ±10 mm Fußkorrektur physikalisch
+    nicht zu schaffen) zählt die Stoßgrenze im Vergleich zum Trab.
+    """
+    trab, netz = out["Randomisiert"]["Trab"], out["Randomisiert"]["Netz"]
+    distance = netz["Strecke Mittel"]
+    walked = distance is not None and distance >= MIN_DISTANCE and netz["umgefallen"] <= trab["umgefallen"]
+    yaw_trab, yaw_netz = trab["|Gier| Mittel [°]"], netz["|Gier| Mittel [°]"]
+    on_course = yaw_trab is not None and yaw_netz is not None and yaw_netz <= yaw_trab / 2
+    limits = out.get("Stoßgrenze", {})
+    pushed = bool(limits) and all(
+        limits["Netz"][side] >= PUSH_GAIN * limits["Trab"][side] for side in PUSH_DIRECTIONS
+    )
     cal = out["Szenarien"].get("Kalibrierfehler ±3°")
     if cal is None or cal["Netz"]["fallen_at"] is not None:
         turned = False
@@ -255,22 +304,25 @@ def acceptance(out: dict) -> dict[str, bool]:
         turned = True
     else:
         turned = abs(cal["Netz"]["yaw"]) <= abs(cal["Trab"]["yaw"]) / 2
-    return {ACCEPT_FALLS: falls, ACCEPT_PUSH: pushed, ACCEPT_CALIBRATION: turned}
+    return {ACCEPT_DISTANCE: walked, ACCEPT_COURSE: on_course, ACCEPT_PUSH: pushed, ACCEPT_CALIBRATION: turned}
 
 
-def load_network(path) -> tuple[Network, str]:
-    """Netz aus .zip (Training, braucht stable-baselines3) oder .onnx laden. Gibt (Netz, Modus) zurück."""
+def load_network(path) -> tuple[Network, dict]:
+    """Netz aus .zip (Training, braucht stable-baselines3) oder .onnx laden.
+
+    Gibt (Netz, Einstellungen) zurück, darin u. a. "mode" und die Fußkorrektur ["scales"]["foot"].
+    """
     path = Path(path)
     if path.suffix == ".onnx":
         net = OnnxNetwork(path)
-        return net, net.mode
+        return net, net.settings
     if path.suffix == ".zip":
         from stable_baselines3 import PPO
 
         meta = json.loads((path.parent / "settings.json").read_text(encoding="utf-8"))
         check_settings(meta, path.name)
         model = PPO.load(path, device="cpu")
-        return (lambda obs: model.predict(obs, deterministic=True)[0]), meta["mode"]
+        return (lambda obs: model.predict(obs, deterministic=True)[0]), meta
     raise ValueError(f"Unbekanntes Format: {path.name} (erwartet .zip oder .onnx)")
 
 
@@ -291,7 +343,12 @@ def print_comparison(out: dict) -> None:
         a, b = out["Randomisiert"]["Trab"][key], out["Randomisiert"]["Netz"][key]
         show = (lambda v: "–" if v is None else f"{v:.3g}")
         print(f"  {key:24s} Trab {show(a):>7s} | Netz {show(b):>7s}")
-    print("\nAbnahme (Plan Phase 3):")
+    if out.get("Stoßgrenze"):
+        print("\nStoßgrenze (stärkster Seitenstoß ohne Umfallen, 0,2 s):")
+        for side in PUSH_DIRECTIONS:
+            a, b = out["Stoßgrenze"]["Trab"][side], out["Stoßgrenze"]["Netz"][side]
+            print(f"  nach {side:6s}  Trab {a:4.0f} N | Netz {b:4.0f} N")
+    print("\nAbnahme (Phase 3, mit dem Betreuer vereinbart):")
     for text, ok in acceptance(out).items():
         print(f"  [{'x' if ok else ' '}] {text}")
 
@@ -327,9 +384,11 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.policy:
-        network, mode = load_network(args.policy)
-        print(f"Vergleich: {args.policy} (Modus {mode}), 10 s mit {COMMAND[0]:.0f} mm/s geradeaus\n")
-        out = compare(network, mode, args.episodes, args.seed)
+        network, meta = load_network(args.policy)
+        mode, foot = meta["mode"], meta["scales"]["foot"]
+        print(f"Vergleich: {args.policy} (Modus {mode}, Fußkorrektur {foot} mm), "
+              f"10 s mit {COMMAND[0]:.0f} mm/s geradeaus\n")
+        out = compare(network, mode, args.episodes, args.seed, foot_scale=foot)
         print_comparison(out)
         if args.json:
             Path(args.json).parent.mkdir(parents=True, exist_ok=True)

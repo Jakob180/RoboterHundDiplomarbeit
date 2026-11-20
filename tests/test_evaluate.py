@@ -101,29 +101,76 @@ def test_strong_push_in_the_comparison_tilts_more():
 
 
 def test_compare_runs_trot_and_network_on_the_same_dogs():
-    out = evaluate.compare(lambda obs: np.zeros(12), episodes=1, scenarios={"Standard": rnd.Randomization()})
+    out = evaluate.compare(lambda obs: np.zeros(12), episodes=1, scenarios={"Standard": rnd.Randomization()},
+                           push_step=10.0, push_max=20.0)
     assert out["Szenarien"]["Standard"]["Trab"] == out["Szenarien"]["Standard"]["Netz"]
     assert out["Randomisiert"]["Trab"] == out["Randomisiert"]["Netz"]
     assert out["Randomisiert"]["Trab"]["Episoden"] == 1
+    assert out["Stoßgrenze"]["Trab"] == out["Stoßgrenze"]["Netz"] == {"links": 10.0, "rechts": 10.0}
 
 
-def test_acceptance_criteria_from_the_plan():
+def test_push_limit_is_the_strongest_push_survived_without_a_fall_below():
+    # Trab ohne Netz: hält 17 N nach links und 19 N nach rechts, fällt bei 20 N
+    assert evaluate.push_limit(direction=+1, step=10.0, max_force=30.0) == 10.0
+    assert evaluate.push_limit(direction=-1, step=10.0, max_force=30.0) == 10.0
+
+
+def test_push_limit_stops_at_the_strongest_push_tried():
+    assert evaluate.push_limit(direction=+1, step=5.0, max_force=10.0) == 10.0
+
+
+def test_push_limit_is_zero_when_the_weakest_push_already_tips_nova():
+    assert evaluate.push_limit(direction=+1, step=20.0, max_force=40.0) == 0.0
+
+
+def test_network_runs_with_its_own_foot_scale():
+    left = np.tile([0.0, 1.0, 0.0], 4)  # alle Füße nach links
+    narrow = evaluate.run_policy_episode(rnd.Randomization(), lambda obs: left)
+    wide = evaluate.run_policy_episode(rnd.Randomization(), lambda obs: left, foot_scale=(20.0, 40.0, 15.0))
+    assert wide.drift < narrow.drift - 50.0  # Füße weiter links -> Rumpf weiter rechts
+
+
+def _acceptance_input():
     def result(fallen=None, yaw=0.0):
-        return evaluate.PolicyResult(fallen, None if fallen else 0.9, 0.0, None if fallen else yaw, 5.0)
-    out = {
-        "Szenarien": {
-            "Seitenstoß 20 N": {"Trab": result(fallen=6.0)._asdict(), "Netz": result()._asdict()},
-            "Kalibrierfehler ±3°": {"Trab": result(yaw=40.0)._asdict(), "Netz": result(yaw=-15.0)._asdict()},
-        },
-        "Randomisiert": {"Trab": {"umgefallen": 6}, "Netz": {"umgefallen": 2}},
+        return evaluate.PolicyResult(fallen, None if fallen else 0.9, 0.0, None if fallen else yaw, 5.0)._asdict()
+
+    def summary(falls, distance, yaw):
+        return {"umgefallen": falls, "Strecke Mittel": distance, "|Gier| Mittel [°]": yaw}
+
+    return {
+        "Szenarien": {"Kalibrierfehler ±3°": {"Trab": result(yaw=40.0), "Netz": result(yaw=-15.0)}},
+        "Randomisiert": {"Trab": summary(1, 0.81, 39.6), "Netz": summary(1, 0.96, 16.7)},
+        "Stoßgrenze": {"Trab": {"links": 17.0, "rechts": 19.0}, "Netz": {"links": 22.0, "rechts": 24.0}},
+    }, result
+
+
+def test_acceptance_criteria_agreed_with_the_supervisor():
+    out, result = _acceptance_input()
+    assert evaluate.acceptance(out) == {
+        evaluate.ACCEPT_DISTANCE: True, evaluate.ACCEPT_COURSE: True,
+        evaluate.ACCEPT_PUSH: True, evaluate.ACCEPT_CALIBRATION: True,
     }
-    assert evaluate.acceptance(out) == {evaluate.ACCEPT_FALLS: True, evaluate.ACCEPT_PUSH: True,
-                                        evaluate.ACCEPT_CALIBRATION: True}
-    out["Randomisiert"]["Netz"]["umgefallen"] = 4    # nur ein Drittel weniger: nicht "deutlich"
-    out["Szenarien"]["Kalibrierfehler ±3°"]["Netz"] = result(yaw=25.0)._asdict()  # nicht halbiert
-    out["Szenarien"]["Seitenstoß 20 N"]["Netz"] = result(fallen=6.2)._asdict()
-    assert evaluate.acceptance(out) == {evaluate.ACCEPT_FALLS: False, evaluate.ACCEPT_PUSH: False,
-                                        evaluate.ACCEPT_CALIBRATION: False}
+    out["Randomisiert"]["Netz"]["Strecke Mittel"] = 0.89
+    out["Randomisiert"]["Netz"]["|Gier| Mittel [°]"] = 20.0       # nicht halbiert
+    out["Stoßgrenze"]["Netz"]["rechts"] = 23.0                      # rechts nicht ein Viertel stärker
+    out["Szenarien"]["Kalibrierfehler ±3°"]["Netz"] = result(yaw=25.0)
+    assert evaluate.acceptance(out) == {
+        evaluate.ACCEPT_DISTANCE: False, evaluate.ACCEPT_COURSE: False,
+        evaluate.ACCEPT_PUSH: False, evaluate.ACCEPT_CALIBRATION: False,
+    }
+
+
+def test_distance_does_not_count_when_the_network_falls_more_often():
+    out, _ = _acceptance_input()
+    out["Randomisiert"]["Netz"]["umgefallen"] = 2
+    assert evaluate.acceptance(out)[evaluate.ACCEPT_DISTANCE] is False
+
+
+def test_acceptance_fails_when_every_dog_fell():
+    out, _ = _acceptance_input()
+    out["Randomisiert"]["Netz"] = {"umgefallen": 20, "Strecke Mittel": None, "|Gier| Mittel [°]": None}
+    result = evaluate.acceptance(out)
+    assert result[evaluate.ACCEPT_DISTANCE] is False and result[evaluate.ACCEPT_COURSE] is False
 
 
 def test_networks_load_from_zip_and_onnx(tmp_path):
@@ -139,7 +186,8 @@ def test_networks_load_from_zip_and_onnx(tmp_path):
     (tmp_path / "settings.json").write_text(json.dumps(policy.settings(env.policy)), encoding="utf-8")
     export_onnx.export(tmp_path / "final.zip", tmp_path / "netz.onnx")
     obs = np.random.default_rng(0).normal(size=34).astype(np.float32)
-    from_zip, mode_zip = evaluate.load_network(tmp_path / "final.zip")
-    from_onnx, mode_onnx = evaluate.load_network(tmp_path / "netz.onnx")
-    assert mode_zip == mode_onnx == "residual"
+    from_zip, settings_zip = evaluate.load_network(tmp_path / "final.zip")
+    from_onnx, settings_onnx = evaluate.load_network(tmp_path / "netz.onnx")
+    assert settings_zip["mode"] == settings_onnx["mode"] == "residual"
+    assert settings_zip["scales"]["foot"] == settings_onnx["scales"]["foot"] == list(policy.FOOT_SCALE)
     assert from_zip(obs) == pytest.approx(np.clip(from_onnx(obs), -1, 1), abs=1e-5)
