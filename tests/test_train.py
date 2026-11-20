@@ -85,3 +85,47 @@ def test_settings_json_records_the_trained_foot_scale(tmp_path):
     train.train(quick=True, run="breit", out=tmp_path, vec_cls=DummyVecEnv, foot_scale=(20.0, 40.0, 15.0))
     meta = json.loads((tmp_path / "checkpoints" / "breit" / "settings.json").read_text(encoding="utf-8"))
     assert meta["scales"]["foot"] == [20.0, 40.0, 15.0]
+
+
+def test_push_training_uses_strong_side_pushes():
+    from randomization import PUSH_STYLES
+    (name, millions, randomize, push), = config.PUSH_TRAINING
+    assert randomize and push in PUSH_STYLES
+
+
+def test_make_env_with_a_push_style():
+    from randomization import PUSH_STYLES
+    env = train.make_env("residual", True, "stark-seitlich", 0)
+    assert env.pushes and env.push_style == PUSH_STYLES["stark-seitlich"]
+
+
+def test_push_training_continues_a_trained_network(quick_run, tmp_path):
+    _, source = quick_run
+    final = train.train(quick=True, run="stoss", out=tmp_path, vec_cls=DummyVecEnv, start_from=source)
+    folder = tmp_path / "checkpoints" / "stoss"
+    assert final == folder / "final.zip"
+    name = config.PUSH_TRAINING[0][0]
+    assert (folder / f"{name}.zip").exists()
+    assert not (folder / f"{config.CURRICULUM['residual'][0][0]}.zip").exists()  # kein Lehrplan von vorne
+    assert json.loads((folder / "settings.json").read_text(encoding="utf-8")) == \
+        json.loads((source.parent / "settings.json").read_text(encoding="utf-8"))
+
+
+def test_push_training_keeps_the_foot_scale_of_the_network(quick_run, tmp_path):
+    import shutil
+    import policy
+    _, source = quick_run
+    wide = tmp_path / "breit"
+    wide.mkdir()
+    shutil.copy(source, wide / "final.zip")
+    (wide / "settings.json").write_text(
+        json.dumps(policy.settings(policy.ResidualMode(foot_scale=(20.0, 40.0, 15.0)))), encoding="utf-8",
+    )
+    train.train(quick=True, run="stoss-breit", out=tmp_path, vec_cls=DummyVecEnv, start_from=wide / "final.zip")
+    meta = json.loads((tmp_path / "checkpoints" / "stoss-breit" / "settings.json").read_text(encoding="utf-8"))
+    assert meta["scales"]["foot"] == [20.0, 40.0, 15.0]
+
+
+def test_push_training_is_an_option_of_the_command_line():
+    assert train.parse_args([]).push_training is None
+    assert train.parse_args(["--push-training", "checkpoints/a/final.zip"]).push_training == "checkpoints/a/final.zip"

@@ -238,3 +238,14 @@ def test_push_strength_reaches_the_randomization():
 
 def test_foot_scale_reaches_the_policy():
     assert NovaEnv(foot_scale=(20.0, 40.0, 15.0)).policy.foot_scale == (20.0, 40.0, 15.0)
+
+
+def test_push_style_reaches_the_randomization():
+    import math
+    from randomization import PUSH_STYLES
+    style = PUSH_STYLES["stark-seitlich"]
+    for randomize in (True, False):
+        env = NovaEnv(randomize=randomize, pushes=True, push_style=style, episode_seconds=30.0)
+        env.reset(seed=0)
+        forces = [math.hypot(p.force[0], p.force[1]) for p in env.randomization.pushes]
+        assert forces and min(forces) >= style.force[0]

@@ -165,3 +165,25 @@ def test_default_push_strength_stays_15_newton():
     b = rnd.sample_pushes(np.random.default_rng(0), 600.0, max_force=15.0)
     assert a == b
     assert max(math.hypot(p.force[0], p.force[1]) for p in a) <= 15.0
+
+
+def test_strong_side_pushes_come_from_the_side():
+    style = rnd.PUSH_STYLES["stark-seitlich"]
+    pushes = rnd.sample_pushes(np.random.default_rng(0), 600.0, style=style)
+    sides = set()
+    for p in pushes:
+        fx, fy, fz = p.force
+        force = math.hypot(fx, fy)
+        assert style.force[0] - 1e-9 <= force <= style.force[1] + 1e-9 and fz == 0.0
+        assert abs(math.degrees(math.atan2(fx, abs(fy)))) <= style.side_only + 1e-9  # höchstens 30° neben links/rechts
+        assert style.duration[0] <= p.duration <= style.duration[1]
+        sides.add(fy > 0)
+    assert sides == {True, False}  # nach links und nach rechts
+    gaps = np.diff([p.time for p in pushes])
+    assert gaps.min() >= style.every[0] and gaps.max() <= style.every[1]
+
+
+def test_push_style_reaches_sample():
+    style = rnd.PUSH_STYLES["stark-seitlich"]
+    r = rnd.sample(np.random.default_rng(1), True, 60.0, style=style)
+    assert r.pushes and min(math.hypot(p.force[0], p.force[1]) for p in r.pushes) >= style.force[0]

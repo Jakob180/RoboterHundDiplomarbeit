@@ -82,3 +82,8 @@ CURRICULUM = {
     ],
     # Stufe 2 startet mit Nachahmen (Behavior Cloning) und kommt in Phase 4.
 }
+
+# Gezieltes Stoßtraining (20.11.2026): ein fertiges Netz weitertrainieren, fast nur mit
+# starken Seitenstößen (randomization.PUSH_STYLES). train.py --push-training <final.zip>.
+# Vierter Wert: Name einer Stoß-Art statt stärkster Stoß in N.
+PUSH_TRAINING = [("4-starke-seitenstoesse", 6.0, True, "stark-seitlich")]

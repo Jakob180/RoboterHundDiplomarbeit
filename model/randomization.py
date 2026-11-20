@@ -58,6 +58,26 @@ IMU_DELAY = (0, 10)              # ms, in 2-ms-Schritten
 NOMINAL_SOLREF = 0.02            # MuJoCo-Standard
 
 
+@dataclass(frozen=True)
+class PushStyle:
+    """Wie die Stöße für das gezielte Stoßtraining gewürfelt werden."""
+
+    every: tuple[float, float]      # s zwischen zwei Stößen
+    force: tuple[float, float]      # N
+    duration: tuple[float, float]   # s
+    side_only: float                # höchstens so viele Grad neben genau links/rechts
+
+
+# Gezieltes Stoßtraining (20.11.2026): Die Netze halten nicht mehr aus als der Trab
+# (17 N links, 19 N rechts), auch mit ±40 mm Fußkorrektur. Im normalen Training sind
+# so starke Seitenstöße selten, hier kommt fast jeder Stoß stark und von der Seite.
+# 12 bis 28 N: um die Grenze des Trabs herum, ein Teil ist zu schaffen (sonst lernt es nichts),
+# das Ziel der Abnahme (22 N links, 24 N rechts) liegt mitten drin.
+PUSH_STYLES = {
+    "stark-seitlich": PushStyle(every=(2.0, 4.0), force=(12.0, 28.0), duration=(0.15, 0.25), side_only=30.0),
+}
+
+
 class Push(NamedTuple):
     time: float                          # s ab Start
     force: tuple[float, float, float]    # N in Weltkoordinaten
@@ -91,8 +111,10 @@ class Randomization:
 
 def sample(
     rng: np.random.Generator, pushes: bool = True, duration: float = 20.0, max_force: float = PUSH_FORCE[1],
+    style: PushStyle | None = None,
 ) -> Randomization:
     """Neue Werte würfeln. duration (s): bis wann Stöße geplant werden, max_force (N): stärkster Stoß.
+    style: Stöße nach PUSH_STYLES statt in zufälliger Richtung bis max_force.
 
     Die Stöße werden zuletzt gewürfelt. Mit gleichem rng ist der Hund deshalb
     mit und ohne Stöße derselbe, nur die Stöße kommen dazu.
@@ -122,13 +144,20 @@ def sample(
     # Ausgangswerte aus Phase 1) gleich, und der Sensor ist mit und ohne Stöße derselbe.
     r.imu = _sample_imu(np.random.default_rng((r.seed, 1)))
     if pushes:
-        r.pushes = sample_pushes(rng, duration, max_force)
+        r.pushes = sample_pushes(rng, duration, max_force, style)
     return r
 
 
-def sample_pushes(rng: np.random.Generator, duration: float, max_force: float = PUSH_FORCE[1]) -> list[Push]:
-    """Stöße alle 3 bis 6 s bis `duration` (s), waagrecht in zufälliger Richtung, 0 bis max_force N."""
+def sample_pushes(
+    rng: np.random.Generator, duration: float, max_force: float = PUSH_FORCE[1], style: PushStyle | None = None,
+) -> list[Push]:
+    """Stöße alle 3 bis 6 s bis `duration` (s), waagrecht in zufälliger Richtung, 0 bis max_force N.
+
+    Mit style: Abstand, Stärke und Dauer aus style, Richtung links oder rechts (± style.side_only Grad).
+    """
     u = rng.uniform
+    if style is not None:
+        return _styled_pushes(rng, duration, style)
     planned = []
     t = u(*PUSH_EVERY)
     while t < duration:
@@ -136,6 +165,19 @@ def sample_pushes(rng: np.random.Generator, duration: float, max_force: float = 
         force = u(PUSH_FORCE[0], max_force)
         planned.append(Push(t, (force * math.cos(angle), force * math.sin(angle), 0.0), u(*PUSH_DURATION)))
         t += u(*PUSH_EVERY)
+    return planned
+
+
+def _styled_pushes(rng: np.random.Generator, duration: float, s: PushStyle) -> list[Push]:
+    u = rng.uniform
+    planned = []
+    t = u(*s.every)
+    while t < duration:
+        side = math.pi / 2 if u() < 0.5 else -math.pi / 2  # +y = nach links
+        angle = side + math.radians(u(-s.side_only, s.side_only))
+        force = u(*s.force)
+        planned.append(Push(t, (force * math.cos(angle), force * math.sin(angle), 0.0), u(*s.duration)))
+        t += u(*s.every)
     return planned
 
 

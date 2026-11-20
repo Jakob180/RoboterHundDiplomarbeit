@@ -176,6 +176,16 @@ Was daraus folgt:
 **IMU: GY-521 mit MPU6050** (Beschleunigung + Drehrate, I2C, Adresse 0x68).
 Reicht für das Netz, siehe 4.4.
 
+**Gewogen (20.11.2026):** Servo 67 g (× 12 = 804 g), Pi 5 46 g, PCA9685 13 g,
+LiPo 265 g. Gedruckte Teile geschätzt 600 bis 700 g, Powerbank noch nicht
+gewogen. Mit Schrauben, Lagern und Kabeln (geschätzt 150 bis 300 g) und
+Powerbank (wie im Modell 0,22 kg) ergibt das ca. 2,1 bis 2,4 kg. Das Modell
+rechnet mit 2,6 kg, ist also eher zu schwer (für die Servos die sichere
+Seite). Die Massen im Modell erst ändern, wenn der Hund fertig ist: dann den
+ganzen Hund wiegen und den Schwerpunkt bestimmen (Vorderbeine auf die Waage,
+Hinterbeine auf eine gleich hohe Unterlage, dann umgekehrt), danach neu
+trainieren.
+
 **Ultraschall:** noch nicht ausgesucht, Vorschlag in 4.4.
 
 ---
@@ -779,6 +789,22 @@ Jede Phase endet mit etwas Prüfbarem.
   kippt Nova um. Mit dem Anfangs-Zufall des Trainings läuft der Trab mit
   ±40 mm 65 % statt 80 % der Strecke, fällt aber nicht. Nächster Schritt:
   3. Training mit ±40 mm, Netz 2 und 3 mit der neuen Abnahme vergleichen.
+- **3. Training (20.11.2026, ±40 mm seitlich, 86 min am PC)** und Netz 2 mit
+  der neuen Abnahme (Trab / Netz 2 mit ±10 mm / Netz 3 mit ±40 mm):
+  Strecke 81 / 96 / 95 %, Abdrehen 39,6 / 16,7 / 23,8°, Kalibrierfehler
+  51 / 16 / 3,5°, Spiel 2° (gedreht) 4,7 / 3,2 / 36,8°, Stoßgrenze links/rechts
+  17/19 / 18/16 / 19/17 N, Stürze randomisiert 1 / 1 / 1. Abnahme: Netz 2
+  3 von 4, Netz 3 2 von 4. **Die breitere Fußkorrektur hebt die Stoßgrenze
+  nicht**, beide Netze liegen ±2 N um den Trab. Vermutung: In Stufe 1 gibt der
+  Trab den Takt der Schritte vor, das Netz kann nicht schnell einen Schritt
+  zur Seite machen; dazu sind im Training wirklich starke Seitenstöße selten
+  (0 bis 25 N, zufällige Richtung, 0,1 bis 0,2 s). Bestes Netz bisher: Netz 2.
+- **Letzter Versuch Stufe 1 (20.11.2026):** gezieltes Stoßtraining. Netz 2 wird
+  6 Mio. Schritte weitertrainiert, fast nur mit Seitenstößen (12 bis 28 N,
+  ±30° um links/rechts, 0,15 bis 0,25 s, alle 2 bis 4 s):
+  `train.py --push-training checkpoints/residual-20261119-1725/final.zip`.
+  Steigt die Stoßgrenze nicht, ist das der Beleg, dass Stufe 1 Stöße nicht
+  besser abfängt als der Trab, und die Stoßfestigkeit wird Ziel von Stufe 2.
 
 **Phase 4: Stufe 2 und Pi-Software**
 - `model/imitation.py`: Daten mit dem Lehrer sammeln, Behavior Cloning.
