@@ -302,6 +302,11 @@ der folgende Plan ab, ohne dass alles an einem riskanten Schritt hängt:
 - **Neu als Pflicht: Sicherheits-Erkennung.** Nova soll erkennen, welcher Motor
   zu wenig Strom bekommt, und sich bei einem Kurzschluss (oder zu viel Strom)
   abschalten. Siehe Hardware-Tabelle in 4.4.
+- **Nachtrag 21.11.2026:** Der Betreuer lässt uns freie Hand (auch beim
+  Stoß-Kriterium). Es werden keine weiteren Teile bestellt. Die Strom-Erkennung
+  pro Motor entfällt damit vorerst (dafür fehlt ein Stromsensor). Es bleibt die
+  Sicherheit in der Software (`src/controller.py`: Neigung, Sensor-Ausfall,
+  ungültiges Netz, Verspätung).
 - Abnahme Phase 3 neu (siehe dort): Stoßgrenze statt „20 N überstanden“,
   Strecke und Kurs statt „halb so oft umgefallen“. Zusätzlich ein Training mit
   ±40 mm seitlicher Fußkorrektur (statt ±10 mm).

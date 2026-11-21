@@ -67,7 +67,8 @@ Zwei getrennte Ordner, damit schnelle Tests nie mit Git kollidieren:
   - Gelenknamen: `FL/FR/RL/RR` + `_shoulder/_upper/_lower`; `JOINT_ORDER` ist die Reihenfolge der 12 Netz-Ausgaben.
   - Kalibrierung: `Joint.zero` ist der Servo-Winkel beim Kinematik-Winkel 0. `to_servo_angle()` / `to_kinematic_angle()` rechnen um, `kinematic_limits()` liefert die Gelenkgrenzen als Kinematik-Winkel. Das ist die einzige Stelle für Gelenkgrenzen, die Simulation übernimmt sie.
   - `ANGLE_STEP`: kleinster Schritt des PCA9685 bei 50 Hz (0,44°).
-  - Grenzwerte, Neutralstellungen, Nullpunkte, `inverted` und Pulsbreiten sind PLATZHALTER und müssen am echten Hund ausgemessen werden. Die Nullpunkte sind so gewählt, dass 90° ungefähr die Stehpose ist.
+  - Grenzwerte, Neutralstellungen, Nullpunkte, `inverted` und Pulsbreiten sind PLATZHALTER und müssen am echten Hund ausgemessen werden. Die Nullpunkte sind so gewählt, dass 90° ungefähr die Stehpose ist (Bein senkrecht, Oberschenkel 50° nach hinten, Knie 90°).
+  - Kalibrierung: `src/calibrate.py --hardware` misst am aufgebockten Hund je Gelenk Nullpunkt (Bezugslage), Richtung und Anschläge, speichert `~/nova-kalibrierung.json`. Als `calibration.json` im Repo-Ordner überschreibt sie die Platzhalter (`servos.load_calibration`, Pfad auch über `NOVA_CALIBRATION`; die Tests setzen ihn auf eine fehlende Datei). `Servos.set_raw()` fährt ohne Gelenkgrenzen (nur 5..175°) und ist NUR für die Kalibrierung. Anleitung mit Bild: `docs/zusammenbau.md`.
   - Im Fake-Modus getestet, noch nicht auf der Hardware.
 - `src/kinematics.py`: Inverse Kinematik für ein Bein, `leg_ik(x, y, z)` -> `LegAngles(shoulder, upper, lower)`, Umkehrung `leg_fk()`. Einheiten mm und Grad.
   - Bein-Koordinaten: Ursprung auf der Schulterachse, x vorne, y nach AUSSEN, z oben. Dadurch rechnen alle 4 Beine gleich.

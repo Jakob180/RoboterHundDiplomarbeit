@@ -11,14 +11,17 @@ z. B. am Pi oder unter Linux:
 
 ACHTUNG: Noch nicht auf der echten Hardware getestet.
 Die Grenzwerte und Nullpunkte unten sind Platzhalter und müssen für Nova
-ausgemessen werden, am besten BEVOR die Beine montiert sind.
+ausgemessen werden: mit src/calibrate.py am fertigen Hund. Liegt eine
+calibration.json im Repo (oder unter NOVA_CALIBRATION), gelten ihre Werte.
 """
 
 from __future__ import annotations
 
+import json
 import math
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 
 # ---------------------------------------------------------------------------
@@ -40,7 +43,7 @@ class Joint:
 # Spalten: Kanal, untere Grenze, obere Grenze, Grundstellung, Nullpunkt
 # PLATZHALTER-WERTE: unbedingt am echten Hund ausmessen!
 # Die Nullpunkte sind so gewählt, dass die Grundstellung (90°) ungefähr die
-# Stehpose aus gait.py ist: Oberschenkel 50° nach vorne, Knie 90° gebeugt.
+# Stehpose aus gait.py ist: Bein senkrecht, Oberschenkel 50° nach hinten, Knie 90° gebeugt.
 JOINTS: dict[str, Joint] = {
     "FL_shoulder": Joint(0,  60, 120, 90, 90),
     "FL_upper":    Joint(1,  30, 150, 90, 140),
@@ -59,6 +62,28 @@ JOINTS: dict[str, Joint] = {
     "RR_lower":    Joint(11, 30, 150, 90, 0, inverted=True),
 }
 
+
+def load_calibration(path, joints: dict[str, Joint]) -> dict[str, Joint]:
+    """Werte aus der Kalibrier-Datei (src/calibrate.py) über die Platzhalter legen. Kanäle bleiben."""
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    result = dict(joints)
+    for name, v in data.get("joints", {}).items():
+        if name not in result:
+            raise ValueError(f"Kalibrierung: unbekanntes Gelenk {name!r}")
+        joint = Joint(result[name].channel, float(v["min"]), float(v["max"]), float(v["neutral"]),
+                      float(v["zero"]), bool(v["inverted"]))
+        if not 0.0 <= joint.min_angle < joint.max_angle <= 180.0:
+            raise ValueError(f"Kalibrierung {name}: Grenzen {joint.min_angle}..{joint.max_angle} passen nicht")
+        if not joint.min_angle <= joint.neutral <= joint.max_angle:
+            raise ValueError(f"Kalibrierung {name}: Grundstellung {joint.neutral} liegt außerhalb der Grenzen")
+        result[name] = joint
+    return result
+
+
+CALIBRATION_FILE = Path(os.environ.get("NOVA_CALIBRATION", Path(__file__).resolve().parent.parent / "calibration.json"))
+if CALIBRATION_FILE.exists():
+    JOINTS = load_calibration(CALIBRATION_FILE, JOINTS)
+
 # Reihenfolge, in der z. B. das neuronale Netz seine 12 Ausgaben liefert
 JOINT_ORDER: list[str] = list(JOINTS.keys())
 
@@ -66,6 +91,7 @@ JOINT_ORDER: list[str] = list(JOINTS.keys())
 MIN_PULSE_US = 500
 MAX_PULSE_US = 2500
 PWM_HZ = 50.0  # Standard von ServoKit
+RAW_RANGE = (5.0, 175.0)  # Grad: weiter fährt set_raw() (nur Kalibrierung) nie, auch nicht aus Versehen
 
 # Feinster Schritt, den der PCA9685 stellen kann: Er teilt eine PWM-Periode
 # (20 ms) in 4096 Stufen, das sind 4,88 µs bzw. 0,44° pro Stufe.
@@ -171,6 +197,19 @@ class Servos:
         """Fährt alle Gelenke in die Grundstellung."""
         for name, joint in JOINTS.items():
             self.set_joint(name, joint.neutral)
+
+    def set_raw(self, channel: int, angle: float) -> float:
+        """NUR für die Kalibrierung (src/calibrate.py): Kanal direkt auf einen Servo-Winkel, OHNE Gelenkgrenzen.
+
+        Die Grenzen werden dabei ja erst gemessen. Begrenzt nur auf RAW_RANGE. Gibt den gesetzten Winkel zurück.
+        """
+        angle = max(RAW_RANGE[0], min(RAW_RANGE[1], float(angle)))
+        self._servo[channel].angle = angle
+        return angle
+
+    def release(self, channel: int) -> None:
+        """Einen Kanal kraftlos schalten (kein Signal mehr)."""
+        self._servo[channel].angle = None
 
     def relax(self) -> None:
         """Schaltet das PWM-Signal ab, die Servos werden kraftlos."""
