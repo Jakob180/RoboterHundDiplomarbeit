@@ -652,6 +652,19 @@ schrittweise einschalten (Curriculum), sonst lernt das Netz am Anfang gar nichts
    - Akku unter 6,6 V → hinsetzen, entspannen.
    - Alle Winkel laufen weiter über `servos.py` und werden dort begrenzt.
 
+**Stand 21.11.2026:** `src/controller.py` und `src/mpu6050.py` fertig und gegen
+die Simulation getestet (Software-in-the-Loop): Trab, Netz 2 und das Netz der
+Stufe 2 laufen durch die Pi-Schleife, Netz 2 kommt dort genauso weit wie in
+der Trainingsumgebung (Test). Sicherheit wie oben, außer Akkuspannung (dafür
+fehlt noch der Sensor). Rechenzeit pro Takt (`--dry`, ohne I2C): Laptop 2,2 ms,
+**Pi 5 0,3 ms** (höchstens 0,85 ms, 0 von 500 Takten zu spät, beide Netze und
+Trab). Am echten Hund kommt das Schreiben der 12 Servos über I2C dazu (bei
+100 kHz geschätzt einige ms, mit 400 kHz weniger), noch messen. Am Pi sind
+numpy, onnxruntime 1.32 und smbus2 im venv installiert (21.11.2026). Neu: Liegepose `gait.LIE` (80 mm, bis 70 mm in den Gelenkgrenzen).
+In der Simulation ist der erste Messwert direkt nach dem Start um ca. 20°
+falsch (der Hund setzt sich noch), daher setzt sich die Simulation vorher
+10 Takte.
+
 ### 5.5 Erste Versuche am echten Hund (Reihenfolge)
 
 1. Jeder Servo einzeln, Richtung und Nullpunkt prüfen (Kalibrierung).
@@ -848,6 +861,25 @@ Jede Phase endet mit etwas Prüfbarem.
   Kurzer Lerntest am Laptop (Trab als Lehrer, 300.000 Schritte): randomisiert
   80 → 96 % Strecke, Abdrehen 60° → 44°, Kalibrierfehler 58° → 18°, Stürze
   gleich (1 von 6). Der Feinschliff verbessert das Netz also über den Trab hinaus.
+- **1. Feinschliff am PC (21.11.2026, `full-ppo`, 50,5 Mio. Schritte, 5,3 h):**
+  Trab / Netz 2 / Stufe 2 nach Abschnitt 1 (20,5 Mio.) / Stufe 2 am Ende:
+  Stürze randomisiert 1 / 1 / 0 / 0, Strecke 81 / 96 / 96 / 93 %, Abdrehen
+  39,6 / 16,7 / 20,6 / 30,0°, Kalibrierfehler 51 / 16 / 2,3 / 44°, Spiel 2°
+  4,7 / 3,2 / 21 / 50°, Stoßgrenze 17/19 / 18/16 / 17/19 / 15/19 N.
+  Belohnung: steigt in den ersten 5 Mio. Schritten (740 → 870), bleibt bis
+  20 Mio. oben, fällt mit Abschnitt 2 (Stöße bis 25 N) stark und dann langsam
+  (auch weil die Nachahmung ausgeblendet wird). **Abschnitt 2 hat das Netz
+  verschlechtert** (mehr Schwanken, Kurs und Kalibrierfehler schlechter), die
+  Stoßgrenze steigt in keinem Abschnitt. Vermutung „falsches Vorbild (reiner
+  Trab statt Trab + Netz 2)“ widerlegt: Nach Abschnitt 1 (Nachahmung noch
+  stark) ist der Kalibrierfehler mit 2,3° besser als bei Netz 2. Bestes Netz
+  der Stufe 2 bisher: `full-ppo/1-randomisiert.zip`. Schwachpunkt: Spiel 2°.
+- **Fertige Netze (21.11.2026):** `model/policies/nova_residual_v1.onnx` (Netz 2,
+  Stufe 1) und `model/policies/nova_full_v1.onnx` (Stufe 2 nach Abschnitt 1),
+  je mit `.json`. ONNX gegen Original: größte Abweichung 4e-7. Gegenprobe am
+  Laptop (Linux, onnxruntime) gibt exakt dieselben Kennzahlen wie am PC
+  (Windows, PyTorch). Nächstes: Pi-Software (5.4, 5.6), dann echte Messwerte
+  und beide Stufen neu trainieren (ohne Abschnitt mit 25-N-Stößen).
 - Abnahme: Das Netz aus Stufe 2 läuft in der Simulation allein mindestens so
   gut wie der klassische Trab. Die ganze Kette läuft am PC gegen MuJoCo und
   am Pi ohne Servos.

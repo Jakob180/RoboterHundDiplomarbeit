@@ -34,7 +34,7 @@ def test_export_writes_network_and_settings(trained, tmp_path):
     assert onnx_path.exists()
     meta = json.loads(onnx_path.with_suffix(".json").read_text(encoding="utf-8"))
     assert meta["mode"] == "residual"
-    assert meta["source"] == "final.zip"
+    assert meta["source"] == f"{zip_path.parent.name}/final.zip"  # Lauf + Datei, ohne Pfad davor
 
 
 def test_onnx_gives_the_same_actions_as_the_trained_model(trained, tmp_path):

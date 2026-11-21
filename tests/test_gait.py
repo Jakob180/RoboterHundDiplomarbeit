@@ -122,3 +122,12 @@ def test_swing_tells_how_far_each_foot_is_in_its_swing():
     assert [u is None for u in swings["FL"]] == [u is None for u in swings["RR"]]  # diagonale Paare
     assert [u is None for u in swings["FR"]] == [u is None for u in swings["RL"]]
     assert swings["FL"] != swings["FR"]
+
+
+def test_lying_pose_is_low_and_inside_the_joint_limits():
+    angles = body_ik(gait.LIE.feet, gait.LIE.body)
+    for leg in LEGS:
+        for joint in ("shoulder", "upper", "lower"):
+            low, high = servos.kinematic_limits(f"{leg}_{joint}")
+            assert low <= getattr(angles[leg], joint) <= high
+    assert gait.LIE.body.height < gait.SIT.body.height < gait.STAND.body.height

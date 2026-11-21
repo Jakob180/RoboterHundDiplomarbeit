@@ -42,7 +42,7 @@ Tests: `.venv\Scripts\python -m pytest` (laufen ohne Hardware, setzen `NOVA_SIM=
 Training (nur PC, Phase 3): zusätzlich PyTorch nur für die CPU und `model/requirements.txt` (Befehle stehen oben in der Datei). Dann:
 `python model/train.py --quick` (Probelauf), `python model/train.py` (ganzer Lehrplan), Lernkurven mit `tensorboard --logdir runs`,
 danach `python model/evaluate.py --policy checkpoints/<lauf>/final.zip` und `python model/export_onnx.py checkpoints/<lauf>/final.zip`.
-`checkpoints/` und `runs/` sind in `.gitignore`, fertige Netze kommen nach `model/policies/` (werden committet).
+`checkpoints/` und `runs/` sind in `.gitignore`, fertige Netze kommen nach `model/policies/` (werden committet). Stand 21.11.2026: `nova_residual_v1` (Netz 2, Stufe 1) und `nova_full_v1` (Stufe 2, `full-ppo/1-randomisiert.zip`).
 
 ## Am Pi
 
@@ -56,7 +56,7 @@ Zwei getrennte Ordner, damit schnelle Tests nie mit Git kollidieren:
 - Schnell testen: Laptop -> `scp -r src <pi>:~/nova-test/` -> am Pi `~/nova/.venv/bin/python src/...` in `~/nova-test` starten.
 - Fertig: am Laptop `git push`, am Pi in `~/nova` `git pull`.
 - Am Pi ohne `NOVA_SIM` starten, dann bewegen sich die echten Servos.
-- Eingerichtet seit 15.11.2026 (`~/nova` mit venv, `~/nova-test`, I2C an). Der Pi ist noch nicht im Hund. Der PCA9685 hängt am Pi (Adresse 0x40), der erste Servo hat sich am 19.11.2026 bewegt. Der GY-521 ist noch nicht angeschlossen (Ersatz mit fertig gelöteten Pins kommt Mitte Dezember).
+- Eingerichtet seit 15.11.2026 (`~/nova` mit venv, `~/nova-test`, I2C an). Seit 21.11.2026 auch numpy, onnxruntime und smbus2 im venv (`requirements-pi.txt`). Der Pi ist noch nicht im Hund. Der PCA9685 hängt am Pi (Adresse 0x40), der erste Servo hat sich am 19.11.2026 bewegt. Der GY-521 ist noch nicht angeschlossen (Ersatz mit fertig gelöteten Pins kommt Mitte Dezember).
 
 ## Aktueller Stand (Nov. 2026)
 
@@ -82,7 +82,10 @@ Zwei getrennte Ordner, damit schnelle Tests nie mit Git kollidieren:
   - Drehen: `update(dt, speed, yaw_rate)` mit `yaw_rate` in °/s (+ = Linkskurve). `trot.phase` (0..1), `trot.x`, `trot.y`, `trot.heading` sind öffentlich (fürs Netz). `trot.swing(bein)` sagt, wie weit ein Fuß im Schwung ist (0..1, None = steht).
   - `python src/gait.py` zeigt Stehen -> Sitzen -> Trab als 3D-Animation mit Winkelverlauf, `--gif datei.gif` speichert sie.
   - Trab mit 150 mm/s braucht bis ca. 300 °/s an Ober- und Unterschenkel. Mit den echten Servos vergleichen.
-- `src/imu.py`: Komplementärfilter für den GY-521 (MPU6050). `ComplementaryFilter.update(gyro, accel, dt)` (rad/s, m/s²) -> Richtung "oben" im Rumpf, dazu `roll`/`pitch` in Grad. Läuft in der Simulation auf den MuJoCo-Werten und später am Pi. Das Auslesen über I2C fehlt noch (Sensor noch nicht angeschlossen).
+- `src/imu.py`: Komplementärfilter für den GY-521 (MPU6050). `ComplementaryFilter.update(gyro, accel, dt)` (rad/s, m/s²) -> Richtung "oben" im Rumpf, dazu `roll`/`pitch` in Grad. Läuft in der Simulation auf den MuJoCo-Werten und am Pi.
+- `src/mpu6050.py`: MPU6050 über I2C (smbus2, Adresse 0x68), ±500 °/s, ±4 g, Tiefpass 44 Hz. `read()` -> (Drehrate rad/s, Beschleunigung m/s²) in Rumpf-Achsen, `calibrate()` misst den Nullpunkt des Gyroskops (Hund muss still sein). Nimmt auch gängige Nachbau-Chips (WHO_AM_I 0x68/0x70/0x72/0x98). Einbaulage `MOUNT` ist PLATZHALTER. Mit nachgebautem Bus getestet, noch nicht am echten Sensor.
+- `src/controller.py`: Hauptschleife für den Pi (Plan 5.4/5.6), 50 Hz: Lagesensor -> Filter -> Netz (ONNX) -> Gelenkwinkel -> Servos, CSV-Protokoll je Takt. `k` (0..1) blendet zwischen Trab und Netz (Standard 0). Sicherheit: Neigung > 30° -> Servos locker; NaN vom Netz, Sensor-Fehler oder > 3 Takte zu spät -> Takt ohne Netz; 0,5 s ohne Sensor -> anhalten. Aufstehen aus der Liegepose (`gait.LIE`, 80 mm), Hinlegen, dann locker. Hardware: `PiHardware` (Servos + MPU6050), `SimHardware` (MuJoCo, Software-in-the-Loop), `DryHardware` (Rechenzeit messen). Echte Servos nur mit `--hardware`. `NOVA_SIM=1 python src/controller.py --policy model/policies/nova_full_v1.onnx --k 1 --speed 150`, `--dry` misst die Rechenzeit (Laptop 2,2 ms, Pi 5 0,3 ms pro Takt, ohne I2C). Beide Netze laufen in der Schleife wie in der Trainingsumgebung (Test). Noch nicht auf der Hardware getestet.
+- Am Pi: Pakete aus `requirements-pi.txt` ins venv (`~/nova/.venv/bin/python -m pip install -r requirements-pi.txt`).
 - `src/nova_model.py`: MuJoCo-Modell, wird aus den Maßen in `kinematics.py` erzeugt. Gelenke heißen wie in `servos.py` und drehen wie die Kinematik-Winkel (0 = Bein senkrecht), die Winkel aus `body_ik()` gehen also direkt (in Radiant) an die Simulation.
   - Einfache Formen statt STL-Teile. Massen geschätzt, zusammen 2,6 kg, Akku und Powerbank als eigene Teile im Rumpf (Lage PLATZHALTER).
   - Servodaten aus dem Datenblatt bei 7,4 V: 2,59 N·m, 443 °/s. `SERVO_KP` und `SERVO_DEAD_TIME` sind PLATZHALTER, bis die Servos am Prüfstand gemessen sind.

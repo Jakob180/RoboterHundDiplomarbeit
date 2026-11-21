@@ -1,0 +1,8 @@
+# Für den Raspberry Pi 5 (nur ausführen, nicht programmieren). Immer im venv, nie mit sudo:
+#   ~/nova/.venv/bin/python -m pip install -r requirements-pi.txt
+# MuJoCo, PyTorch und Stable-Baselines3 braucht der Pi nicht.
+adafruit-circuitpython-servokit   # PCA9685 -> Servos (src/servos.py)
+gpiod                             # braucht Blinka am Pi 5
+smbus2                            # Lagesensor MPU6050 über I2C (src/mpu6050.py)
+numpy
+onnxruntime                       # fertiges Netz ausführen (src/policy.py)

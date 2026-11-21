@@ -67,7 +67,7 @@ def export(zip_path, onnx_path) -> Path:
             dynamic_shapes={"obs": {0: torch.export.Dim("batch")}},
             dynamo=True, verbose=False, external_data=False,
         )
-    meta["source"] = zip_path.name
+    meta["source"] = f"{zip_path.parent.name}/{zip_path.name}"  # Lauf + Datei, kein ganzer Pfad (Repo ist öffentlich)
     onnx_path.with_suffix(".json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
     return onnx_path
 
