@@ -7,6 +7,8 @@ randomization.py, die Skalierung von Ein- und Ausgängen in src/policy.py (die
 braucht auch der Pi). Die PPO-Werte kommen mit train.py dazu (Phase 3).
 """
 
+from typing import NamedTuple
+
 # Episode
 EPISODE_SECONDS = 10.0       # 500 Schritte mit 50 Hz
 WARMUP_SECONDS = 0.5         # vorher stehen, damit sich Hund und Lagefilter beruhigen
@@ -24,6 +26,8 @@ FALL_TILT = 40.0             # Grad Neigung
 SPEED_SIGMA = 0.05           # m/s
 YAW_SIGMA = 0.3              # rad/s
 IMITATION_SIGMA = 0.3        # rad (alle 12 Gelenke zusammen)
+CLEARANCE = 15.0             # mm, so hoch soll ein Fuß in der Mitte der Schwungphase mindestens sein
+CLEARANCE_WINDOW = (0.3, 0.7)  # Teil der Schwungphase, in dem die Höhe zählt (Abheben/Aufsetzen nicht)
 COURSE_SIGMA = 10.0          # Grad Abweichung vom befohlenen Kurs
 TORQUE_LIMIT = 0.95          # ab diesem Anteil des Blockiermoments zählt "am Anschlag"
 
@@ -48,7 +52,11 @@ REWARD = {
     # Stufe 2 (Plan 4.2): Die Ausgabe ist der ganze Gelenkwinkel, eine Strafe auf ihre
     # Größe würde das Laufen bestrafen. Nachahmen wird im Training später ausgeblendet
     # (1,0 -> 0,2). Fußrutschen und Fußhöhe kommen mit Phase 4.
-    "full": {**_STAGE_1, "korrektur": 0.0, "ruckeln": -1.0, "nachahmung": 1.0},
+    # Füße: Rutschen = Summe der Geschwindigkeit (m/s) der Füße am Boden; Fußhöhe = Summe der
+    # Fehlhöhe (0..1) der Füße mitten im Schwung. Der Trab hebt in der Simulation im Mittel nur
+    # 13 mm statt der geplanten 25 mm (Servos geben nach), daher gleitend statt fester Grenze.
+    "full": {**_STAGE_1, "korrektur": 0.0, "ruckeln": -1.0, "nachahmung": 1.0,
+             "fuss_rutschen": -0.5, "fusshoehe": -0.5},
 }
 
 # ---------------------------------------------------------------------------
@@ -68,7 +76,21 @@ NET_ARCH = [128, 128]        # 2 Schichten mit je 128 Neuronen, Actor und Critic
 # Zufallsausschläge am Anfang (Standardabweichung e^-2 = 0,14). Gemessen ohne Training:
 # mit -1,0 (Plan) läuft der Trab beim Ausprobieren nur 12 % der Strecke, mit -2,0 noch 79 %.
 LOG_STD_INIT = -2.0
+# Stufe 2: Der Zufall wirkt direkt auf die Gelenkwinkel. Gemessen mit dem nachgemachten Netz
+# (20.11.2026, Trainingsbedingungen): ohne Zufall 53 % der Strecke, e^-3 57 %, e^-2,5 47 %,
+# e^-2 nur 28 %. e^-3 = 0,05 ist auch das Rauschen beim Sammeln der Lehrer-Daten.
+FULL_LOG_STD_INIT = -3.0
 CHECKPOINT_EVERY = 1_000_000  # Schritte zwischen zwei Zwischenständen
+
+class Stage(NamedTuple):
+    """Ein Abschnitt im Lehrplan."""
+
+    name: str
+    millions: float          # Millionen Schritte
+    randomize: bool          # zufälliger Hund je Episode
+    push: float | str        # stärkster Stoß in N (0 = keine) oder Name aus randomization.PUSH_STYLES
+    train_actor: bool = True  # False: nur der Critic lernt (Aufwärmen vor dem Feinschliff)
+
 
 # Lehrplan je Stufe: (Name, Millionen Schritte, Randomisierung, stärkster Stoß in N; 0 = keine Stöße).
 # Erst ohne Zufall (lernt es überhaupt?), dann ein zufälliger Hund je Episode, dann Stöße.
@@ -76,14 +98,22 @@ CHECKPOINT_EVERY = 1_000_000  # Schritte zwischen zwei Zwischenständen
 # 20-N-Stoß nie erlebt und nicht abgefangen; 15 N übersteht schon der Trab ohne Netz.
 CURRICULUM = {
     "residual": [
-        ("1-ohne-zufall", 2.0, False, 0.0),
-        ("2-randomisiert", 6.0, True, 0.0),
-        ("3-mit-stoessen", 7.0, True, 25.0),
+        Stage("1-ohne-zufall", 2.0, False, 0.0),
+        Stage("2-randomisiert", 6.0, True, 0.0),
+        Stage("3-mit-stoessen", 7.0, True, 25.0),
     ],
-    # Stufe 2 startet mit Nachahmen (Behavior Cloning) und kommt in Phase 4.
+    # Stufe 2 (Plan 4.2, Schritt 3): startet mit dem nachgemachten Netz aus model/imitation.py.
+    # Zuerst lernt nur der Critic (sonst macht der anfangs unsinnige Critic den Actor kaputt),
+    # dann PPO mit Nachahmung, die von 1,0 auf 0,2 ausgeblendet wird (IMITATION_FADE).
+    "full": [
+        Stage("0-critic-aufwaermen", 0.5, True, 15.0, train_actor=False),
+        Stage("1-randomisiert", 20.0, True, 15.0),
+        Stage("2-mit-stoessen", 30.0, True, 25.0),
+    ],
 }
+IMITATION_FADE = (1.0, 0.2)  # Gewicht der Nachahmung am Anfang und am Ende des Feinschliffs
 
 # Gezieltes Stoßtraining (20.11.2026): ein fertiges Netz weitertrainieren, fast nur mit
 # starken Seitenstößen (randomization.PUSH_STYLES). train.py --push-training <final.zip>.
 # Vierter Wert: Name einer Stoß-Art statt stärkster Stoß in N.
-PUSH_TRAINING = [("4-starke-seitenstoesse", 6.0, True, "stark-seitlich")]
+PUSH_TRAINING = [Stage("4-starke-seitenstoesse", 6.0, True, "stark-seitlich")]

@@ -831,6 +831,23 @@ Jede Phase endet mit etwas Prüfbarem.
   allein mit dem Netz von Stufe 2**, genau wie der Trab: 95 % Strecke, gleiche
   Stoßgrenze (17/19 N), randomisiert gleich viele Stürze. Nächstes: dasselbe am
   PC mit Netz 2 als Lehrer (1 Mio. Paare), dann der PPO-Feinschliff.
+  **Am PC (20.11.2026, Netz 2 als Lehrer, 1 Mio. Paare in 3 min):** Das Netz von
+  Stufe 2 läuft wie sein Lehrer: 95 % Strecke, 17° Abdrehen, Stoßgrenze
+  18/17 N, 3 von 4 Kriterien der Stufe 1.
+- **PPO-Feinschliff (Schritt 3), Code 20.11.2026:** `train.py --start-from
+  checkpoints/full-bc/final.zip`. Lehrplan `config.CURRICULUM["full"]`: 0,5 Mio.
+  Schritte nur Critic (Actor eingefroren), dann 20 Mio. randomisiert mit Stößen
+  bis 15 N und 30 Mio. mit Stößen bis 25 N. Nachahmung 1,0 → 0,2 linear über den
+  Feinschliff. Neu in der Belohnung: Füße rutschen (−0,5, Summe der
+  Fußgeschwindigkeit am Boden) und Fußhöhe (−0,5, Fehlhöhe unter 15 mm mitten
+  im Schwung, gleitend, weil der Trab in der Simulation im Mittel nur 13 mm
+  statt 25 mm hebt). Selbstkollision in Stufe 2 an (kostet kein Tempo, die
+  Beine berühren sich beim Trab nie). Zufall beim Ausprobieren e^−3 statt e^−2:
+  Mit e^−2 läuft das nachgemachte Netz unter Trainingsbedingungen nur 28 % der
+  Strecke, mit e^−3 57 % (ohne Zufall 53 %, der Trab selbst 53 %).
+  Kurzer Lerntest am Laptop (Trab als Lehrer, 300.000 Schritte): randomisiert
+  80 → 96 % Strecke, Abdrehen 60° → 44°, Kalibrierfehler 58° → 18°, Stürze
+  gleich (1 von 6). Der Feinschliff verbessert das Netz also über den Trab hinaus.
 - Abnahme: Das Netz aus Stufe 2 läuft in der Simulation allein mindestens so
   gut wie der klassische Trab. Die ganze Kette läuft am PC gegen MuJoCo und
   am Pi ohne Servos.

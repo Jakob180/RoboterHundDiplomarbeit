@@ -119,6 +119,11 @@ class Trot:
         """Wo der Trab im Zyklus gerade ist, 0..1. FL und RR schwingen ab `duty`, FR und RL eine halbe Periode versetzt."""
         return self._phase
 
+    def swing(self, leg: str) -> float | None:
+        """Wie weit der Fuß `leg` in seiner Schwungphase ist (0..1), None = Fuß steht am Boden."""
+        p = (self._phase + _PHASE_OFFSET[leg]) % 1.0
+        return None if p < self.duty else (p - self.duty) / (1.0 - self.duty)
+
     def update(self, dt: float, speed: float, yaw_rate: float = 0.0) -> Pose:
         """Einen Zeitschritt dt (s) weiter.
 

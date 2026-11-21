@@ -36,6 +36,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 import config  # noqa: E402
 from gait import STAND  # noqa: E402
 from imu import ComplementaryFilter  # noqa: E402
+from kinematics import LEGS  # noqa: E402
+from nova_model import FOOT_RADIUS  # noqa: E402
 from policy import FOOT_SCALE, N_ACTIONS, OBS_CLIP, STAND_ANGLES, FullMode, ResidualMode, joint_dict  # noqa: E402
 from randomization import (  # noqa: E402
     PUSH_FORCE, PushStyle, Randomization, apply, imu_reading, sample, sample_pushes,
@@ -63,6 +65,7 @@ class NovaEnv(gym.Env):
         push_force: float = PUSH_FORCE[1],
         foot_scale=FOOT_SCALE,
         push_style: PushStyle | None = None,
+        self_collision: bool | None = None,
     ) -> None:
         if mode not in config.REWARD:
             raise ValueError(f"mode muss 'residual' oder 'full' sein, nicht {mode!r}")
@@ -73,7 +76,9 @@ class NovaEnv(gym.Env):
         self.push_style = push_style    # gezieltes Stoßtraining (randomization.PUSH_STYLES)
         self.max_yaw_rate = max_yaw_rate
         self.episode_steps = round(episode_seconds * CONTROL_HZ)
-        self.weights = config.REWARD[mode]
+        self.weights = dict(config.REWARD[mode])  # eigene Kopie, z. B. für das Ausblenden der Nachahmung
+        # Stufe 2: Beine können aneinander und am Rumpf anstoßen (Plan 4.2), Stufe 1 wie bisher
+        self.self_collision = mode == "full" if self_collision is None else self_collision
         self.policy = ResidualMode(foot_scale) if mode == "residual" else FullMode()
         self.observation_space = spaces.Box(-OBS_CLIP, OBS_CLIP, (self.policy.n_obs,), np.float32)
         self.action_space = spaces.Box(-1.0, 1.0, (N_ACTIONS,), np.float32)
@@ -98,12 +103,13 @@ class NovaEnv(gym.Env):
             )
         self._fixed_command = options.get("command")  # (mm/s, °/s) für die ganze Episode
 
-        self.sim = NovaSim()
+        self.sim = NovaSim(self_collision=self.self_collision)
         apply(self.sim, self.randomization)
         stand = joint_dict(STAND_ANGLES)
         self.sim.reset(stand, STAND.body.height)
         self._frame = self.sim.model.geom("frame").id
         self._floor = self.sim.model.geom("floor").id
+        self._feet = np.array([self.sim.model.geom(f"{leg}_foot").id for leg in LEGS])
         self._pushes = sorted(self.randomization.pushes)
         self.policy.reset()
         self.filter = ComplementaryFilter()
@@ -111,6 +117,7 @@ class NovaEnv(gym.Env):
         for _ in range(round(config.WARMUP_SECONDS * CONTROL_HZ)):
             self._advance(stand)
         self._start_yaw = self.sim.torso().yaw  # Grad, Richtung beim Start = Kurs 0
+        self._feet_before = self.sim.data.geom_xpos[self._feet, :2].copy()
 
         self.steps = 0
         self.walked = 0.0      # mm, in Blickrichtung gelaufen
@@ -136,6 +143,12 @@ class NovaEnv(gym.Env):
             share = self.walked / self.commanded if self.commanded > 0 else 0.0
             info["nova"] = {"strecke": share, "umgefallen": float(fallen)}
         return obs, float(reward), fallen, truncated, info
+
+    def set_reward_weight(self, name: str, value: float) -> None:
+        """Gewicht eines Belohnungs-Terms ändern (nur in dieser Umgebung), z. B. Nachahmung ausblenden."""
+        if name not in self.weights:
+            raise KeyError(f"Belohnungs-Term {name!r} gibt es in Stufe {self.mode!r} nicht")
+        self.weights[name] = float(value)
 
     @property
     def last_imu(self) -> tuple[tuple[float, ...], tuple[float, ...]]:
@@ -177,6 +190,26 @@ class NovaEnv(gym.Env):
         self.policy.set_command(speed, yaw_rate)
         self._next_command += rng.uniform(*config.COMMAND_EVERY)
 
+    def _feet_terms(self, dt: float) -> tuple[float, float]:
+        """(Füße rutschen, Füße zu tief im Schwung) für diesen Schritt."""
+        data = self.sim.data
+        pos = data.geom_xpos[self._feet]
+        g1, g2 = data.contact.geom1, data.contact.geom2
+        speed = np.linalg.norm(pos[:, :2] - self._feet_before, axis=1) / dt   # m/s waagrecht
+        self._feet_before = pos[:, :2].copy()
+        slip = 0.0
+        for k, foot in enumerate(self._feet):
+            if np.any(((g1 == foot) & (g2 == self._floor)) | ((g1 == self._floor) & (g2 == foot))):
+                slip += float(speed[k])
+        low = 0.0
+        a, b = config.CLEARANCE_WINDOW
+        for k, leg in enumerate(LEGS):
+            u = self.policy.trot.swing(leg)
+            if u is not None and a <= u <= b:
+                height = pos[k, 2] * 1000 - FOOT_RADIUS                     # mm über dem Boden
+                low += max(0.0, (config.CLEARANCE - height) / config.CLEARANCE)
+        return slip, low
+
     def _rate(self, action: np.ndarray, previous: np.ndarray, start: np.ndarray, dt: float):
         """Belohnungs-Terme dieses Schritts (Plan-Tabelle 4.1) und ob Nova umgefallen ist."""
         data = self.sim.data
@@ -200,6 +233,7 @@ class NovaEnv(gym.Env):
         fallen = data.qpos[2] * 1000 < config.FALL_HEIGHT or tilt > config.FALL_TILT or on_floor
 
         imitation = np.radians(self.policy.angles - getattr(self.policy, "reference", self.policy.angles))
+        slip, low = self._feet_terms(dt)
         terms = {
             "tempo": math.exp(-((vx - self.policy.speed / 1000) / config.SPEED_SIGMA) ** 2),
             "drehrate": math.exp(-((spin[2] - math.radians(self.policy.yaw_rate)) / config.YAW_SIGMA) ** 2),
@@ -213,6 +247,8 @@ class NovaEnv(gym.Env):
             "servo_last": float(np.mean(load ** 2)),
             "anschlag": float(np.mean(np.abs(load) > config.TORQUE_LIMIT)),
             "nachahmung": math.exp(-float(np.sum(imitation ** 2)) / config.IMITATION_SIGMA ** 2),
+            "fuss_rutschen": slip,
+            "fusshoehe": low,
             "umfallen": 1.0 if fallen else 0.0,
         }
         return terms, fallen

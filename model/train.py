@@ -6,6 +6,7 @@ PPO-Training für Nova (Plan Phase 3, Abschnitte 4.1 und 5.3). Nur am PC.
     python model/train.py --envs 8 --scale 0.5   # 8 Hunde parallel, halb so viele Schritte
     tensorboard --logdir runs                    # Lernkurven im Browser: http://localhost:6006
     python model/train.py --push-training checkpoints/<lauf>/final.zip   # fertiges Netz mit starken Seitenstößen weitertrainieren
+    python model/train.py --start-from checkpoints/full-bc/final.zip     # Stufe 2: PPO-Feinschliff des nachgemachten Netzes
 
 Lehrplan aus config.CURRICULUM: erst ohne Zufall, dann mit Randomisierung, dann
 mit Stößen. Alle Abschnitte landen in einer Lernkurve in runs/<lauf>/.
@@ -60,6 +61,48 @@ def make_env(mode: str, randomize: bool, push_force, seed: int, foot_scale=FOOT_
     return env
 
 
+def actor_parameters(policy) -> list:
+    """Alles, was zum Actor gehört (die Ausgabe des Netzes), ohne den Critic."""
+    return [*policy.mlp_extractor.policy_net.parameters(), *policy.action_net.parameters(), policy.log_std]
+
+
+def freeze_actor(policy, frozen: bool) -> None:
+    """Actor einfrieren (nur der Critic lernt) oder wieder freigeben."""
+    for parameter in actor_parameters(policy):
+        parameter.requires_grad_(not frozen)
+
+
+def set_exploration(policy, log_std: float) -> None:
+    """Zufall beim Ausprobieren neu setzen (Standardabweichung e^log_std auf jede Ausgabe)."""
+    import torch
+
+    with torch.no_grad():
+        policy.log_std.fill_(log_std)
+
+
+def imitation_weight(done: float, total: float) -> float:
+    """Gewicht der Nachahmung: linear von IMITATION_FADE[0] auf [1] über `total` Schritte."""
+    start, end = config.IMITATION_FADE
+    share = min(max(done / total, 0.0), 1.0) if total > 0 else 1.0
+    return start + (end - start) * share
+
+
+class ImitationFade(BaseCallback):
+    """Stufe 2: Nachahmung im Lauf des Feinschliffs ausblenden, damit das Netz besser werden darf als der Trab."""
+
+    def __init__(self, start: int, total: int) -> None:
+        super().__init__()
+        self.start, self.total = start, total
+
+    def _on_rollout_start(self) -> None:
+        weight = imitation_weight(self.num_timesteps - self.start, self.total)
+        self.training_env.env_method("set_reward_weight", "nachahmung", weight)
+        self.logger.record("nova/nachahmung", weight)
+
+    def _on_step(self) -> bool:
+        return True
+
+
 class NovaLogger(BaseCallback):
     """Schreibt die Belohnungs-Terme und Kennzahlen der Episoden nach TensorBoard."""
 
@@ -99,8 +142,10 @@ def train(
 ) -> Path:
     """Ganzen Lehrplan trainieren. Gibt den Pfad zu final.zip zurück.
 
-    start_from: fertiges Netz (final.zip mit settings.json daneben), das mit
-    config.PUSH_TRAINING weitertrainiert wird. Modus und Fußkorrektur kommen dann vom Netz.
+    start_from: fertiges Netz (final.zip mit settings.json daneben), das weitertrainiert
+    wird. Modus und Fußkorrektur kommen dann vom Netz: Ein Netz aus Stufe 1 bekommt das
+    Stoßtraining (config.PUSH_TRAINING), ein nachgemachtes Netz aus model/imitation.py den
+    PPO-Feinschliff von Stufe 2 (config.CURRICULUM["full"]).
     """
     source_settings = None
     if start_from is not None:
@@ -108,19 +153,22 @@ def train(
         source_settings = json.loads((start_from.parent / "settings.json").read_text(encoding="utf-8"))
         policy.check_settings(source_settings, start_from.name)
         mode, foot_scale = source_settings["mode"], source_settings["scales"]["foot"]
-        stages = config.PUSH_TRAINING
+        stages = config.PUSH_TRAINING if mode == "residual" else config.CURRICULUM[mode]
+    elif mode == "full":
+        raise ValueError("Stufe 2 startet mit einem nachgemachten Netz: zuerst model/imitation.py, "
+                         "dann train.py --start-from checkpoints/<lauf>/final.zip")
     elif mode in config.CURRICULUM:
         stages = config.CURRICULUM[mode]
     else:
-        raise ValueError(f"Training für mode={mode!r} gibt es noch nicht, Stufe 2 kommt in Phase 4.")
+        raise ValueError(f"Unbekannter mode={mode!r}, erwartet 'residual' oder 'full'")
     settings = dict(config.PPO_SETTINGS)
     n_envs = envs or os.cpu_count() or 1
     if quick:  # nur prüfen, ob alles läuft
-        stages = [(name, 0.001, randomize, push_force) for name, _, randomize, push_force in stages]
+        stages = [stage._replace(millions=0.001) for stage in stages]
         settings.update(n_steps=64, batch_size=64, n_epochs=2)
         n_envs = min(n_envs, 2)
 
-    prefix = f"{mode}-stoss" if start_from is not None else mode
+    prefix = f"{mode}-stoss" if start_from is not None and mode == "residual" else mode
     run = run or f"{prefix}-{time.strftime('%Y%m%d-%H%M')}"
     folder = Path(out) / "checkpoints" / run
     folder.mkdir(parents=True, exist_ok=True)
@@ -129,7 +177,10 @@ def train(
     (folder / "settings.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
 
     model = None
-    for i, (name, millions, randomize, push_force) in enumerate(stages):
+    warmup = sum(int(st.millions * 1e6 * scale) for st in stages if not st.train_actor)
+    fade_total = sum(int(st.millions * 1e6 * scale) for st in stages if st.train_actor)
+    for i, stage in enumerate(stages):
+        name, millions, randomize, push_force = stage.name, stage.millions, stage.randomize, stage.push
         steps = int(millions * 1e6 * scale)
         vec = VecMonitor(vec_cls([
             partial(make_env, mode, randomize, push_force, seed + 1000 * i + k, tuple(foot_scale))
@@ -141,6 +192,8 @@ def train(
                 start_from, env=vec, device="cpu", tensorboard_log=str(Path(out) / "runs"),
                 custom_objects=settings if quick else None,
             )
+            if mode == "full":  # nachgemachtes Netz: wenig Zufall, sonst stolpert es gleich
+                set_exploration(model.policy, config.FULL_LOG_STD_INIT)
         elif model is None:
             model = PPO(
                 "MlpPolicy", vec, device="cpu", seed=seed, verbose=0,
@@ -153,19 +206,23 @@ def train(
             )
         else:
             model.set_env(vec)
+        freeze_actor(model.policy, not stage.train_actor)
         if isinstance(push_force, str):
             style = PUSH_STYLES[push_force]
             pushes = f", Seitenstöße {style.force[0]:.0f} bis {style.force[1]:.0f} N"
         else:
             pushes = f", Stöße bis {push_force:.0f} N" if push_force > 0 else ""
-        print(f"[{time.strftime('%H:%M')}] Abschnitt {name}: {steps:,} Schritte, {n_envs} Hunde parallel{pushes}",
+        actor = "" if stage.train_actor else ", nur der Critic lernt"
+        print(f"[{time.strftime('%H:%M')}] Abschnitt {name}: {steps:,} Schritte, {n_envs} Hunde parallel{pushes}{actor}",
               flush=True)
+        callbacks = [
+            CheckpointCallback(max(config.CHECKPOINT_EVERY // n_envs, 1), str(folder), name_prefix=name),
+            NovaLogger(),
+        ]
+        if mode == "full":
+            callbacks.append(ImitationFade(warmup, fade_total))
         model.learn(
-            steps, reset_num_timesteps=(i == 0), tb_log_name=run,
-            callback=[
-                CheckpointCallback(max(config.CHECKPOINT_EVERY // n_envs, 1), str(folder), name_prefix=name),
-                NovaLogger(),
-            ],
+            steps, reset_num_timesteps=(i == 0), tb_log_name=run, callback=callbacks,
         )
         model.save(folder / f"{name}.zip")
         vec.close()
@@ -202,13 +259,17 @@ def parse_args(argv=None) -> argparse.Namespace:
         "--push-training", metavar="FINAL_ZIP",
         help="fertiges Netz mit starken Seitenstößen weitertrainieren (config.PUSH_TRAINING)",
     )
+    parser.add_argument(
+        "--start-from", metavar="FINAL_ZIP",
+        help="fertiges Netz weitertrainieren: Stufe 1 -> Stoßtraining, Stufe 2 (aus imitation.py) -> PPO-Feinschliff",
+    )
     return parser.parse_args(argv)
 
 
 def main() -> None:
     args = parse_args()
     final = train(args.mode, args.run, args.envs, args.scale, args.quick, args.seed, foot_scale=args.foot_scale,
-                  start_from=args.push_training)
+                  start_from=args.start_from or args.push_training)
     print(next_steps(final))
 
 

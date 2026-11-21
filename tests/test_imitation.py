@@ -122,3 +122,12 @@ def test_command_line_options():
     args = imitation.parse_args(["--teacher", "checkpoints/a/final.zip", "--samples", "5000"])
     assert args.teacher == "checkpoints/a/final.zip" and args.samples == 5000
     assert imitation.parse_args([]).teacher is None
+
+
+def test_cloned_network_tries_out_as_little_as_the_collection_noise(cloned):
+    import math
+    from stable_baselines3 import PPO
+    import config
+    model = PPO.load(cloned[0], device="cpu")
+    assert float(model.policy.log_std.detach().mean()) == pytest.approx(config.FULL_LOG_STD_INIT)
+    assert math.exp(config.FULL_LOG_STD_INIT) == pytest.approx(imitation.NOISE, rel=0.01)

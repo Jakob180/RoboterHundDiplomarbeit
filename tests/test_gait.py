@@ -106,3 +106,19 @@ def test_turning_trot_stays_inside_the_joint_limits(speed, yaw_rate):
         for name in servos.JOINT_ORDER:
             low, high = servos.kinematic_limits(name)
             assert low <= getattr(angles[name[:2]], name[3:]) <= high, name
+
+
+def test_swing_tells_how_far_each_foot_is_in_its_swing():
+    trot = gait.Trot()
+    swings = {leg: [] for leg in ("FL", "FR", "RL", "RR")}
+    for _ in range(250):  # 10 Perioden
+        trot.update(0.02, 150.0)
+        for leg in swings:
+            swings[leg].append(trot.swing(leg))
+    for leg, values in swings.items():
+        in_air = [u for u in values if u is not None]
+        assert len(in_air) / len(values) == pytest.approx(1 - trot.duty, abs=0.02)
+        assert all(0.0 <= u < 1.0 for u in in_air)
+    assert [u is None for u in swings["FL"]] == [u is None for u in swings["RR"]]  # diagonale Paare
+    assert [u is None for u in swings["FR"]] == [u is None for u in swings["RL"]]
+    assert swings["FL"] != swings["FR"]

@@ -142,7 +142,7 @@ def behavior_cloning(
         model = PPO(
             "MlpPolicy", NovaEnv(mode="full", randomize=False, pushes=False), device="cpu", seed=seed, verbose=0,
             policy_kwargs={"net_arch": {"pi": config.NET_ARCH, "vf": config.NET_ARCH},
-                           "log_std_init": config.LOG_STD_INIT},
+                           "log_std_init": config.FULL_LOG_STD_INIT},
             **config.PPO_SETTINGS,
         )
     p = model.policy

@@ -249,3 +249,51 @@ def test_push_style_reaches_the_randomization():
         env.reset(seed=0)
         forces = [math.hypot(p.force[0], p.force[1]) for p in env.randomization.pushes]
         assert forces and min(forces) >= style.force[0]
+
+
+def test_stage_2_lets_the_legs_bump_into_each_other():
+    full, residual = NovaEnv(mode="full"), NovaEnv(mode="residual")
+    assert full.self_collision and not residual.self_collision
+    full.reset(seed=0)
+    leg = full.sim.model.geom("FL_foot").id
+    assert full.sim.model.geom_conaffinity[leg] == 1
+
+
+def test_reward_weights_belong_to_one_environment():
+    env = NovaEnv(mode="full")
+    env.set_reward_weight("nachahmung", 0.2)
+    assert env.weights["nachahmung"] == 0.2
+    assert config.REWARD["full"]["nachahmung"] == 1.0
+
+
+def mean_term(env, name, actions, seconds=6.0, **reset):
+    env.reset(seed=0, **reset)
+    values = []
+    for _ in range(round(seconds * 50)):
+        _, _, fallen, _, info = env.step(actions)
+        values.append(info["terms"][name])
+        if fallen:
+            break
+    return float(np.mean(values))
+
+
+def test_feet_slipping_on_a_slippery_floor_cost_reward():
+    import randomization as rnd
+    env = NovaEnv(mode="residual", randomize=False, pushes=False)
+    grip = mean_term(env, "fuss_rutschen", np.zeros(12), options={"command": (150.0, 0.0)})
+    slippery = mean_term(env, "fuss_rutschen", np.zeros(12),
+                         options={"command": (150.0, 0.0), "randomization": rnd.Randomization(floor_friction=0.1)})
+    assert slippery > 2 * grip > 0
+
+
+def test_dragging_feet_cost_reward():
+    standing = mean_term(NovaEnv(mode="full", randomize=False, pushes=False), "fusshoehe", np.zeros(12),
+                         options={"command": (150.0, 0.0)})
+    trotting = mean_term(NovaEnv(mode="residual", randomize=False, pushes=False), "fusshoehe", np.zeros(12),
+                         options={"command": (150.0, 0.0)})
+    assert standing > 0.3 and trotting < standing / 2
+
+
+def test_stage_2_pays_for_clean_feet_stage_1_stays_as_it_was():
+    assert config.REWARD["full"]["fuss_rutschen"] < 0 and config.REWARD["full"]["fusshoehe"] < 0
+    assert "fuss_rutschen" not in config.REWARD["residual"] and "fusshoehe" not in config.REWARD["residual"]
