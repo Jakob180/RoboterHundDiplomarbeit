@@ -10,10 +10,12 @@ Bevor die Teile verschraubt sind:
 - **Wiegen:** alle gedruckten Teile, die Powerbank, Schrauben und Lager
   zusammen. Servo (67 g), Pi (46 g), PCA9685 (13 g) und LiPo (265 g) sind
   schon gewogen.
-- **Beinlängen**, jeweils von Drehachse zu Drehachse: Hüftstück (Schulterachse
-  bis Oberschenkel-Achse, seitlich), Oberschenkel (bis Knie-Achse), Unterschenkel
-  (Knie-Achse bis Fußspitze). Im Modell stehen noch die Werte des
-  Spot-Micro-Originals: 55 / 107,5 / 130 mm.
+- **Beinlängen:** gemessen (22.11.2026) und im Modell eingetragen: Oberschenkel
+  125 mm, Unterschenkel 122 mm bis zur Mitte des Fußrings, dazu der runde Fuß
+  (20 mm), also 142 mm bis zum Boden. Am fertigen Hund noch einmal von Achse
+  zu Achse nachmessen, dazu den seitlichen Versatz (Mitte Schulter-Sternhorn bis
+  Mitte Oberschenkel, von vorne; im Modell 55 mm) und den Abstand der
+  Schulterachsen vorne bis hinten (im Modell 186 mm).
 
 ## 2. Servos
 
@@ -40,8 +42,8 @@ der **Stehpose** ist:
 
 - **Schulter:** Hüftstück waagrecht, das Bein hängt von vorne gesehen
   senkrecht nach unten.
-- **Oberschenkel:** 50° aus der Senkrechten **nach hinten** geneigt. Das Knie
-  liegt hinter der Schulter.
+- **Oberschenkel:** knapp 50° aus der Senkrechten **nach hinten** geneigt. Das
+  Knie liegt hinter der Schulter.
 - **Knie:** Unterschenkel im rechten Winkel (90°) zum Oberschenkel. Der Fuß
   steht dann ungefähr senkrecht unter der Schulter.
 
@@ -49,6 +51,9 @@ Das Horn rastet nur in Stufen ein (bei 25 Zähnen alle 14,4°). Nimm die
 Stellung, die am nächsten dran ist. Den Rest (bis ca. ±7°) gleicht die
 Kalibrierung aus. Die rechten Beine sind spiegelbildlich, dort drehen die
 Servos andersherum. Das ist normal, die Kalibrierung merkt das.
+
+So steht Nova bei 190 mm Höhe (Schulterachse über dem Boden). Gelenke mit
+Kugellagern: 688ZZ (8 × 16 × 5 mm), je Bein eins an Schulter, Hüfte und Knie.
 
 ## 4. Kalibrieren (am Pi)
 

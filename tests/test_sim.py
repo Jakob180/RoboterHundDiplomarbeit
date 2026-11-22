@@ -103,11 +103,11 @@ def with_angle(name: str, angle: float) -> dict[str, LegAngles]:
 
 def test_standing_dog_stays_up_and_level():
     s = sim.NovaSim()
-    s.reset(STAND, 170.0)
+    s.reset(STAND, gait.STAND.body.height)
     for _ in range(50):
         s.step(STAND)
     t = s.torso()
-    assert t.z == pytest.approx(170.0, abs=10.0)
+    assert t.z == pytest.approx(gait.STAND.body.height, abs=10.0)
     assert abs(t.roll) < 1.0 and abs(t.pitch) < 1.0
 
 
@@ -152,14 +152,14 @@ def test_calibration_error_shifts_the_joint():
 
 def test_step_can_take_a_different_control_period():
     s = sim.NovaSim()
-    s.reset(STAND, 170.0)
+    s.reset(STAND, gait.STAND.body.height)
     s.step(STAND, period=0.018)
     assert s.data.time == pytest.approx(0.018)
 
 
 def test_imu_feels_gravity_when_standing():
     s = sim.NovaSim()
-    s.reset(STAND, 170.0)
+    s.reset(STAND, gait.STAND.body.height)
     for _ in range(25):
         s.step(STAND)
     gyro, accel = s.imu()
@@ -169,13 +169,13 @@ def test_imu_feels_gravity_when_standing():
 
 def test_distance_is_none_on_open_ground():
     s = sim.NovaSim()
-    s.reset(STAND, 170.0)
+    s.reset(STAND, gait.STAND.body.height)
     assert s.distance() is None
 
 
 def test_distance_is_in_mm():
     s = sim.NovaSim()
-    s.reset(STAND, 170.0)
+    s.reset(STAND, gait.STAND.body.height)
     tilt = math.radians(30.0)
     s.data.qpos[2] = 0.2
     s.data.qpos[3:7] = (math.cos(tilt / 2), 0.0, math.sin(tilt / 2), 0.0)
@@ -185,7 +185,7 @@ def test_distance_is_in_mm():
 
 def test_push_moves_the_dog_and_stops_after_its_duration():
     s = sim.NovaSim()
-    s.reset(STAND, 170.0)
+    s.reset(STAND, gait.STAND.body.height)
     s.push((0.0, 10.0, 0.0), 0.1)
     for _ in range(5):
         s.step(STAND)
@@ -208,7 +208,7 @@ def test_classic_trot_still_walks():
 @pytest.mark.parametrize("yaw_rate", [20.0, -20.0])
 def test_turning_trot_turns_the_dog(yaw_rate):
     s = sim.NovaSim()
-    s.reset(STAND, 170.0)
+    s.reset(STAND, gait.STAND.body.height)
     trot = gait.Trot()
     for i in range(250):  # 1 s anlaufen, dann 4 s drehen
         v, w = (100.0 * i / 50, 0.0) if i < 50 else (100.0, yaw_rate)
@@ -222,7 +222,7 @@ def test_turning_trot_turns_the_dog(yaw_rate):
 def test_imu_can_be_read_with_a_delay():
     # Schritte von 2 ms (ein Physikschritt), dabei schubsen, damit sich die Werte ändern
     s = sim.NovaSim()
-    s.reset(STAND, 170.0)
+    s.reset(STAND, gait.STAND.body.height)
     s.push((0.0, 15.0, 0.0), 0.05)
     readings = []
     for _ in range(12):
@@ -235,7 +235,7 @@ def test_imu_can_be_read_with_a_delay():
 
 def test_imu_delay_longer_than_the_record_gives_the_oldest_value():
     s = sim.NovaSim()
-    s.reset(STAND, 170.0)
+    s.reset(STAND, gait.STAND.body.height)
     first = s.imu()
     s.step(STAND, period=0.002)
     assert s.imu(delay=1.0) == first

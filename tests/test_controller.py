@@ -262,10 +262,17 @@ def test_strong_push_in_the_simulation_relaxes_the_servos():
     assert cycle.state == "umgefallen" and hw.relaxed
 
 
-@pytest.mark.parametrize("name", ["nova_residual_v1", "nova_full_v1"])
-def test_trained_networks_walk_through_the_pi_loop(name):
+def trained_networks() -> list[Path]:
+    """Fertige Netze in model/policies (nach jeder Änderung der Beinlängen neu trainieren)."""
+    return sorted(POLICIES.glob("*.onnx")) if POLICIES.exists() else []
+
+
+@pytest.mark.parametrize("path", trained_networks() or [None], ids=lambda p: p.stem if p else "keins")
+def test_trained_networks_walk_through_the_pi_loop(path):
     pytest.importorskip("onnxruntime")
-    net = policy.OnnxNetwork(POLICIES / f"{name}.onnx")
+    if path is None:
+        pytest.skip("Noch kein Netz für die aktuellen Beinlängen in model/policies (neu trainieren)")
+    net = policy.OnnxNetwork(path)
     hw = controller.SimHardware()
     c = controller.Controller(hw, network=net, k=1.0)
     c.hold(gait.STAND, 0.5)
@@ -277,11 +284,17 @@ def test_trained_networks_walk_through_the_pi_loop(name):
 
 
 def test_pi_loop_walks_like_the_training_environment():
-    """Gleicher Code in Sim und Pi: Schleife und Trainingsumgebung kommen gleich weit."""
-    pytest.importorskip("onnxruntime")
+    """Gleicher Code in Sim und Pi: Schleife und Trainingsumgebung kommen gleich weit.
+
+    Das Test-Netz hängt von allen Eingängen ab: Bauen Schleife und Umgebung die
+    Beobachtung verschieden, laufen sie verschieden.
+    """
     import randomization as rnd
     from nova_env import NovaEnv
-    net = policy.OnnxNetwork(POLICIES / "nova_residual_v1.onnx")
+    weights = np.random.default_rng(0).normal(0.0, 0.05, (34, 12))  # lenkt deutlich (ca. 23° gedreht)
+
+    def net(obs):
+        return np.tanh(np.asarray(obs) @ weights)
     env = NovaEnv(mode="residual", randomize=False, pushes=False)
     obs, _ = env.reset(seed=0, options={"randomization": rnd.Randomization(), "command": (150.0, 0.0)})
     for _ in range(250):
@@ -350,9 +363,12 @@ def test_pi_hardware_measures_the_gyro_zero_point_at_start(monkeypatch):
     assert calls == ["calibrate"]
 
 
-def test_dry_run_measures_the_computing_time(capsys):
+def test_dry_run_measures_the_computing_time(capsys, tmp_path):
     pytest.importorskip("onnxruntime")
-    code = controller.main(["--dry", "--seconds", "0.5", "--policy", str(POLICIES / "nova_full_v1.onnx"), "--k", "1"])
+    from test_policy import write_linear_network
+    path = tmp_path / "netz.onnx"
+    write_linear_network(path, np.zeros((34, 12)), np.zeros(12), policy.settings(policy.FullMode()))
+    code = controller.main(["--dry", "--seconds", "0.5", "--policy", str(path), "--k", "1"])
     out = capsys.readouterr().out
     assert code == 0 and "Rechenzeit" in out and "zu spät" in out
 

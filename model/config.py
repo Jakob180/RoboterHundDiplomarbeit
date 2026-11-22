@@ -105,10 +105,10 @@ CURRICULUM = {
     # Stufe 2 (Plan 4.2, Schritt 3): startet mit dem nachgemachten Netz aus model/imitation.py.
     # Zuerst lernt nur der Critic (sonst macht der anfangs unsinnige Critic den Actor kaputt),
     # dann PPO mit Nachahmung, die von 1,0 auf 0,2 ausgeblendet wird (IMITATION_FADE).
+    # Ohne Abschnitt mit Stößen bis 25 N: der hat am 21.11.2026 Kurs und Kalibrierfehler verschlechtert.
     "full": [
         Stage("0-critic-aufwaermen", 0.5, True, 15.0, train_actor=False),
         Stage("1-randomisiert", 20.0, True, 15.0),
-        Stage("2-mit-stoessen", 30.0, True, 25.0),
     ],
 }
 IMITATION_FADE = (1.0, 0.2)  # Gewicht der Nachahmung am Anfang und am Ende des Feinschliffs

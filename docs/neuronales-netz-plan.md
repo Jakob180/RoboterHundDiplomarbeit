@@ -186,6 +186,41 @@ ganzen Hund wiegen und den Schwerpunkt bestimmen (Vorderbeine auf die Waage,
 Hinterbeine auf eine gleich hohe Unterlage, dann umgekehrt), danach neu
 trainieren.
 
+**Druckteile laut Slicer (21.11.2026, Bambu-Dateien, PLA, 15 % Füllung Gitter,
+2 Wände, 0,2 mm Schicht):** zusammen 680 g Filament und ca. 27 h Druckzeit.
+Je Stück: Unterschenkel (Wrist) 32 g, Oberschenkel (MidArm) 36 g + Abdeckung
+23 g, UpperArm 21 g (4 Stück), ShoulderOuter vorne 15 g / hinten 34 g, Chassis
+20 g, Bodenabdeckung 91 g, Platte 25 g. Damit (mit Powerbank 0,22 kg und
+geschätzt 0,15 bis 0,25 kg Schrauben, Lager, Kabel) ca. 2,2 bis 2,3 kg; das
+Modell rechnet mit 2,6 kg. Die Dateien enthalten nur den G-Code, keine
+3D-Modelle, Beinlängen lassen sich daraus nicht sicher ablesen.
+
+**Aus den STL-Dateien (21.11.2026, Spot Micro mit „SM2“-Beinen):**
+- Die Beine sind vermutlich **länger als im Modell**: Oberschenkel (`SM2LMidArm`,
+  Hüft-Hornaufnahme bis Knieachse) ca. 133 mm statt 107,5 mm, Unterschenkel
+  (`SM2LWrist`, Knieachse bis Mitte Fußring) ca. 120 mm plus runder Fuß
+  (`SM2Foot`, ca. 20 mm Radius), also ca. 140 mm statt 130 mm. Der
+  Knie-Servo sitzt im Unterschenkel. Unsicher, weil die Teile einzeln
+  vorliegen: am gedruckten Teil mit dem Lineal nachmessen, dann Kinematik,
+  Modell und Training anpassen (längere Hebel = mehr Last auf den Servos).
+- `SMRUpperArm` ist das Spiegelbild von `SMLUpperArm`. Umgedreht passt das
+  linke Teil rechts nicht (Servo-Loch und Stift ca. 2 cm versetzt). Gedruckt
+  wurden 4× links, 0× rechts.
+
+**Stand 22.11.2026: Modell auf die echten Maße umgestellt.** Gemessen (Kollege):
+Oberschenkel 125 mm, Unterschenkel 122 mm (Knieachse bis Mitte Fußring, passt
+zur STL-Datei mit 121,6 mm) plus 20 mm Fuß. Gewogen: Hüftstück 15 g,
+Oberschenkel 29 g + Deckel 19 g, Unterschenkel 22 g, Schulterplatte 15 g,
+Schulterblock 29 g, Chassis 10 g, Platte 22 g. Im Modell: Oberschenkel 125 mm,
+Unterschenkel 142 mm, Fuß 20 mm Radius, Massen 2,1 kg (Hüfte 85 g mit
+Hüftservo, Oberschenkel 55 g, Unterschenkel 95 g mit Knieservo, Rumpf 0,70 kg).
+Stehhöhe 190 mm (dann Oberschenkel 48°, Knie 90° wie auf dem Zusammenbau-Blatt),
+Liegepose 90 mm. Trab mit den neuen Werten: 92 % Strecke, 2° Neigung, Servos
+bis 51 %; Kalibrierfehler ±3° dreht 58° ab, Stoßgrenze 12/13 N (höher und
+leichter als vorher). Die Netze v1 passen nicht mehr: Die `.json` eines Netzes
+enthält jetzt die Beinlängen (Version 2), alte Netze werden abgelehnt. Alles
+neu trainieren. Kugellager laut STL: 688ZZ (8 × 16 × 5), 12 Stück.
+
 **Ultraschall:** noch nicht ausgesucht, Vorschlag in 4.4.
 
 ---

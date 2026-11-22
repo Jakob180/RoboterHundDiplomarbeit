@@ -40,8 +40,8 @@ def test_strong_push_tilts_the_dog_more(nominal):
 
 
 def test_falling_is_detected_and_ends_the_episode():
-    # Viel zu schwache Servos: Nova sackt sofort zusammen
-    result = evaluate.run_episode(FRAMES, rnd.Randomization(servo=sim.ServoParams(stall_torque=0.3)))
+    # Viel zu schwache Servos: Nova sackt zusammen (mit 2,1 kg reichen 0,3 N·m gerade noch zum Hocken)
+    result = evaluate.run_episode(FRAMES, rnd.Randomization(servo=sim.ServoParams(stall_torque=0.1)))
     assert result.fallen_at is not None and result.fallen_at < FRAMES[-1].time
     assert result.distance is None
 

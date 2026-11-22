@@ -39,11 +39,11 @@ from pathlib import Path
 import numpy as np
 
 from gait import STAND, Trot
-from kinematics import LEGS, LegAngles, body_ik, foot_ik
+from kinematics import BODY_LENGTH, BODY_WIDTH, HIP_LENGTH, LEGS, LOWER_LENGTH, UPPER_LENGTH, LegAngles, body_ik, foot_ik
 from servos import JOINT_ORDER, kinematic_limits
 
 CONTROL_HZ = 50.0                 # Steuertakt, wie in sim.py und am Pi
-FORMAT_VERSION = 1                # Version der .json zu einem Netz
+FORMAT_VERSION = 2                # Version der .json zu einem Netz (2: mit Beinlängen, seit 22.11.2026)
 
 # Skalierung der Beobachtung (Plan 4.1). Fest statt gelernt, damit am Pi nichts fehlen kann.
 GYRO_SCALE = 4.0                  # rad/s
@@ -264,6 +264,11 @@ def settings(mode: _Mode) -> dict:
             "max_joint_speed": MAX_JOINT_SPEED,
         },
         "trot": {"period": period, "step_height": step_height, "duty": duty},
+        # Ein Netz gilt nur für die Beine, auf denen es trainiert wurde (Winkel relativ zur Stehpose)
+        "geometry": {
+            "hip": HIP_LENGTH, "upper": UPPER_LENGTH, "lower": LOWER_LENGTH,
+            "body_length": BODY_LENGTH, "body_width": BODY_WIDTH, "stand_height": STAND.body.height,
+        },
     }
 
 

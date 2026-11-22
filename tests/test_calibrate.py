@@ -5,7 +5,9 @@ import json
 import pytest
 
 import calibrate
+import gait
 import servos
+from kinematics import body_ik
 
 
 class FakeServos:
@@ -48,7 +50,8 @@ def test_left_upper_leg_mounted_normally():
     assert joint.zero == pytest.approx(140.0)               # Oberschenkel senkrecht = Kinematik 0
     assert joint.min_angle == pytest.approx(35.0 + calibrate.MARGIN)
     assert joint.max_angle == pytest.approx(165.0 - calibrate.MARGIN)
-    assert joint.neutral == pytest.approx(140.0 - 50.0, abs=1.0)  # Stehpose: Oberschenkel 50° nach hinten
+    stand = body_ik(gait.STAND.feet, gait.STAND.body)["FL"].upper   # Stehpose: Oberschenkel ca. 48° nach hinten
+    assert joint.neutral == pytest.approx(140.0 + stand, abs=0.1)
     assert hw.raw[1] is None                                # danach locker
     assert not any("außerhalb" in text for text in said)
 

@@ -297,3 +297,29 @@ def test_onnx_network_refuses_other_settings(tmp_path):
 def test_foot_scale_needs_three_positive_values(bad):
     with pytest.raises(ValueError, match="foot_scale"):
         policy.ResidualMode(foot_scale=bad)
+
+
+def test_settings_contain_the_leg_geometry():
+    import gait
+    import kinematics
+    g = policy.settings(policy.ResidualMode())["geometry"]
+    assert g == {
+        "hip": kinematics.HIP_LENGTH, "upper": kinematics.UPPER_LENGTH, "lower": kinematics.LOWER_LENGTH,
+        "body_length": kinematics.BODY_LENGTH, "body_width": kinematics.BODY_WIDTH,
+        "stand_height": gait.STAND.body.height,
+    }
+
+
+def test_network_trained_on_other_legs_is_refused():
+    found = policy.settings(policy.ResidualMode())
+    found["geometry"]["upper"] = 107.5  # z. B. mit den alten Spot-Micro-Maßen trainiert
+    with pytest.raises(ValueError, match="geometry.upper"):
+        policy.check_settings(found)
+
+
+def test_networks_from_before_the_geometry_check_are_refused():
+    old = policy.settings(policy.ResidualMode())
+    del old["geometry"]
+    old["version"] = 1
+    with pytest.raises(ValueError, match="version"):
+        policy.check_settings(old)

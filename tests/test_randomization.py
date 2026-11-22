@@ -91,7 +91,7 @@ def standing_sim() -> sim.NovaSim:
     import gait
     from kinematics import body_ik
     s = sim.NovaSim()
-    s.reset(body_ik(gait.STAND.feet, gait.STAND.body), 170.0)
+    s.reset(body_ik(gait.STAND.feet, gait.STAND.body), gait.STAND.body.height)
     for _ in range(5):
         s.step(body_ik(gait.STAND.feet, gait.STAND.body))
     return s

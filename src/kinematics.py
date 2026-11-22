@@ -33,13 +33,16 @@ from typing import NamedTuple
 # Maße
 # ---------------------------------------------------------------------------
 
-# Beinlängen in mm. PLATZHALTER: Spot-Micro-Standardmaße aus
-# mike4192/spot_micro_kinematics_python. Für Nova aus den STL-Dateien abmessen!
-HIP_LENGTH = 55.0     # seitlicher Versatz: Schulterachse -> Hüftgelenk
-UPPER_LENGTH = 107.5  # Oberschenkel: Hüftgelenk -> Knie
-LOWER_LENGTH = 130.0  # Unterschenkel: Knie -> Fuß
+# Beinlängen in mm. Nova hat die längeren "SM2"-Beine (22.11.2026 an den gedruckten
+# Teilen gemessen und mit den STL-Dateien verglichen): Oberschenkel 125 mm (SM2LMidArm),
+# Unterschenkel 122 mm von der Knieachse bis zur Mitte des Fußrings (SM2LWrist) plus
+# 20 mm runder Fuß (SM2Foot) bis zum Boden. Am fertigen Hund von Achse zu Achse nachmessen.
+HIP_LENGTH = 55.0     # seitlicher Versatz: Schulterachse -> Hüftgelenk (Spot-Micro-Maß, noch messen)
+UPPER_LENGTH = 125.0  # Oberschenkel: Hüftgelenk -> Knie
+LOWER_LENGTH = 142.0  # Unterschenkel: Knie -> Fußsohle (122 + 20 mm Fuß)
 
-# Körpermaße in mm: Abstand der Schulterachsen. PLATZHALTER wie oben.
+# Körpermaße in mm: Abstand der Schulterachsen. Rumpf ist original Spot Micro
+# (mike4192/spot_micro_kinematics_python); die Breite stimmt mit der Schulterplatte überein.
 BODY_LENGTH = 186.0   # vorne -> hinten
 BODY_WIDTH = 78.0     # links -> rechts
 

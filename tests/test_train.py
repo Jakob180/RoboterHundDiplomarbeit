@@ -135,7 +135,12 @@ def test_stage_2_curriculum_warms_up_the_critic_first():
     first, *rest = config.CURRICULUM["full"]
     assert first.train_actor is False and first.millions < 1.0
     assert rest and all(stage.train_actor for stage in rest)
-    assert sum(stage.millions for stage in config.CURRICULUM["full"]) >= 30.0  # Plan: 30 bis 100 Mio.
+    assert sum(stage.millions for stage in config.CURRICULUM["full"]) >= 20.0
+
+
+def test_stage_2_has_no_strong_push_stage():
+    # 21.11.2026: Der Abschnitt mit Stößen bis 25 N hat das Netz verschlechtert (Kurs, Kalibrierfehler)
+    assert all(stage.push <= 15.0 for stage in config.CURRICULUM["full"])
 
 
 def test_imitation_fades_from_one_to_a_fifth():

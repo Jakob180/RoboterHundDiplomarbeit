@@ -45,10 +45,11 @@ def _feet(front_x: float = 0.0, rear_x: float = 0.0) -> dict[str, Vec3]:
 
 
 # PLATZHALTER: Höhen und Winkel in der Simulation bzw. am echten Hund anpassen.
-STAND = Pose(_feet(), BodyPose(height=170.0))
+# Stehen bei 190 mm: Oberschenkel 48° nach hinten, Knie 90° (= Servos auf 90°, docs/zusammenbau.md).
+STAND = Pose(_feet(), BodyPose(height=190.0))
 SIT = Pose(_feet(front_x=10.0, rear_x=30.0), BodyPose(height=125.0, pitch=-25.0))  # Nase hoch
-# Liegepose zum Ein- und Ausschalten: Bis 70 mm bleiben alle Gelenke in ihren Grenzen, 80 mm mit Abstand.
-LIE = Pose(_feet(), BodyPose(height=80.0))
+# Liegepose zum Ein- und Ausschalten: Knie 141°, ca. 9° Abstand zur Grenze (bei 80 mm nur noch 4°).
+LIE = Pose(_feet(), BodyPose(height=90.0))
 
 
 def blend(a: Pose, b: Pose, s: float) -> Pose:

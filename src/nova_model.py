@@ -29,13 +29,15 @@ from kinematics import (
 from servos import JOINT_ORDER, kinematic_limits
 
 
-# Massen in kg. PLATZHALTER (geschätzt), zusammen ca. 2,6 kg
-FRAME_MASS = 1.03      # Rumpf mit Pi, Elektronik, Kabeln und den 4 Schulterservos
-BATTERY_MASS = 0.25    # 2S-LiPo für die Servos
-POWERBANK_MASS = 0.22  # Powerbank für den Pi
-HIP_MASS = 0.06        # Schulterstück
-UPPER_MASS = 0.17      # Oberschenkel mit Hüft- und Knieservo
-LOWER_MASS = 0.045     # Unterschenkel mit Fuß
+# Massen in kg, zusammen ca. 2,1 kg. Gewogen (22.11.2026): Servo 67 g, Pi 46 g, PCA9685 13 g,
+# LiPo 265 g, Druckteile einzeln (Hüftstück 15 g, Oberschenkel 29 + Deckel 19 g, Unterschenkel 22 g,
+# Schulterteile 15/29 g, Chassis 10 g, Platte 22 g). Powerbank, Schrauben, Lager, Kabel geschätzt.
+FRAME_MASS = 0.70      # Rumpf: Druckteile ca. 0,25 kg, 4 Schulterservos, Pi, PCA, Kabel, Schrauben
+BATTERY_MASS = 0.265   # 2S-LiPo für die Servos (gewogen)
+POWERBANK_MASS = 0.22  # Powerbank für den Pi. PLATZHALTER, wiegen
+HIP_MASS = 0.085       # Hüftstück 15 g mit Hüftservo 67 g (dreht mit der Schulter)
+UPPER_MASS = 0.055     # Oberschenkel 29 g + Deckel 19 g + Lager und Schrauben
+LOWER_MASS = 0.095     # Unterschenkel 22 g mit Knieservo 67 g (sitzt im Unterschenkel) und Fuß
 
 # Lage im Rumpf in mm (x vorne, y links, z oben, ab der Rumpfmitte). PLATZHALTER
 BATTERY_POS = (-20.0, 0.0, -12.0)    # unten, etwas hinten
@@ -56,7 +58,7 @@ SERVO_DEAD_TIME = 0.020                # s vom Befehl bis zur Reaktion. PLATZHAL
 # Boden: Laminat ungefähr. In der Randomisierung 0,4 bis 1,2.
 FLOOR_FRICTION = 0.8
 
-FOOT_RADIUS = 10.0  # mm
+FOOT_RADIUS = 20.0  # mm, runder Fuß SM2Foot (Außenradius der Gummischale)
 
 
 def _m(mm: float) -> float:

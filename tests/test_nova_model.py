@@ -36,9 +36,9 @@ def self_contacts(model, data) -> int:
     return sum(1 for c in data.contact[:data.ncon] if floor not in (c.geom1, c.geom2))
 
 
-def test_total_mass_is_about_2_6_kg():
+def test_total_mass_is_about_2_1_kg():
     model, _ = load()
-    assert float(model.body_mass.sum()) == pytest.approx(2.6, abs=0.05)
+    assert float(model.body_mass.sum()) == pytest.approx(2.1, abs=0.05)  # gewogen bzw. geschätzt, 22.11.2026
 
 
 def test_torso_centre_of_mass_follows_battery_and_powerbank():
