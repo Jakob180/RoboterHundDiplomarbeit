@@ -221,6 +221,21 @@ leichter als vorher). Die Netze v1 passen nicht mehr: Die `.json` eines Netzes
 enthält jetzt die Beinlängen (Version 2), alte Netze werden abgelehnt. Alles
 neu trainieren. Kugellager laut STL: 688ZZ (8 × 16 × 5), 12 Stück.
 
+**Training mit den echten Maßen (23.11.2026, PC, ca. 4 h):** Trab / Stufe 1
+(`residual-v2`) / Stufe 2 nachgemacht (`full-ppo-v2/0-critic-aufwaermen`) /
+Stufe 2 nach 20 Mio. Schritten Feinschliff (`full-ppo-v2/final`), Auswertung in
+der Trainingsumgebung: geradeaus gedreht 0,3 / −0,1 / −0,4 / +13,6°;
+Kalibrierfehler ±3° 94 / 18 / 21 / 37°; Spiel 2° 23 / 7 / 3,7 / 72°;
+randomisiert Strecke 86 / 94 / 95 / 96 %, Abdrehen 34 / 24 / 26 / 23°, Stürze
+2 / 2 / 2 / 2; Stoßgrenze 12/13 / 14/12 / 13/12 / 13/15 N. Abnahme jeweils 2 von 4
+(Strecke, Kalibrierfehler). Der Feinschliff von Stufe 2 macht den
+Geradeauslauf unruhig (Zwischenstände schwanken zwischen −27° und +14°), daher
+als Netz der Stufe 2 der nachgemachte Stand. Vermutlich fehlt dem Netz eine
+Kurs-Eingabe: Es sieht nur die Drehrate, nicht wie weit es schon abgedreht
+ist, wird aber für den Kurs belohnt (Idee: aufintegrierte Drehrate als
+Eingang). Exportiert: `model/policies/nova_residual_v2` und `nova_full_v2`,
+beide laufen durch die Pi-Schleife (10 s, 1,5 m, ca. 1° gedreht).
+
 **Ultraschall:** noch nicht ausgesucht, Vorschlag in 4.4.
 
 ---

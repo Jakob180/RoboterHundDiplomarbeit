@@ -42,7 +42,7 @@ Tests: `.venv\Scripts\python -m pytest` (laufen ohne Hardware, setzen `NOVA_SIM=
 Training (nur PC, Phase 3): zusätzlich PyTorch nur für die CPU und `model/requirements.txt` (Befehle stehen oben in der Datei). Dann:
 `python model/train.py --quick` (Probelauf), `python model/train.py` (ganzer Lehrplan), Lernkurven mit `tensorboard --logdir runs`,
 danach `python model/evaluate.py --policy checkpoints/<lauf>/final.zip` und `python model/export_onnx.py checkpoints/<lauf>/final.zip`.
-`checkpoints/` und `runs/` sind in `.gitignore`, fertige Netze kommen nach `model/policies/` (werden committet). Seit 22.11.2026 leer: Die Netze v1 waren auf den alten Spot-Micro-Beinlängen trainiert und werden von `check_settings()` abgelehnt (Einstellungen enthalten jetzt `geometry`, `FORMAT_VERSION` 2). Neu trainieren (Stufe 1, dann `imitation.py`, dann Feinschliff) und als `nova_residual_v2` / `nova_full_v2` exportieren.
+`checkpoints/` und `runs/` sind in `.gitignore`, fertige Netze kommen nach `model/policies/` (werden committet). Stand 23.11.2026 (gemessene Maße, `FORMAT_VERSION` 2 mit `geometry`): `nova_residual_v2` (Stufe 1, `residual-v2/final.zip`) und `nova_full_v2` (Stufe 2, nur nachgemacht: `full-ppo-v2/0-critic-aufwaermen.zip`, der PPO-Feinschliff hat den Geradeauslauf schwanken lassen). Netze v1 (alte Spot-Micro-Maße) werden von `check_settings()` abgelehnt.
 
 ## Am Pi
 
